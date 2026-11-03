@@ -23,6 +23,7 @@ function fakeMain(answers: Record<string, Answer> = {}) {
     "agents.start": ok("t1"),
     "agents.send": ok("delivered"),
     "coordinator.projectOf": no("NOT_A_COORDINATOR"),
+    "projects.context": ok("Project instructions\n\nMemory"),
   };
   const call = async (path: string, input: unknown) => {
     calls.push({ path, input });
@@ -41,6 +42,13 @@ const client = (caller: string, main: ReturnType<typeof fakeMain>) => {
 afterEach(() => open.splice(0).forEach((c) => c.close()));
 
 describe("threads.start", () => {
+  it("still starts a thread when the project has no context to give", async () => {
+    const main = fakeMain({ "projects.context": no("NOT_IN_PROJECT") });
+    const { rpc } = client("agent:coordinator-1", main);
+    expect((await rpc.start(input)).ok).toBe(true);
+    expect(main.calls.find((c) => c.path === "agents.start")?.input).toEqual({ agent: THREAD_AGENT, cwd: "/w/1", by: "Zack" });
+  });
+
   it("prepares a worktree, starts the agent in it, records the thread and sends the request as the person", async () => {
     const main = fakeMain();
     const { rpc, collections } = client("agent:coordinator-1", main);
@@ -48,7 +56,8 @@ describe("threads.start", () => {
     expect(r).toEqual({ ok: true, value: { threadId: "t1", branch: "prek/add-badge-1", firstMessage: "delivered" } });
     expect(main.calls).toEqual([
       { path: "workspaces.prepare", input: { projectId: "p1", title: "Add a README badge" } },
-      { path: "agents.start", input: { agent: THREAD_AGENT, cwd: "/w/1" } },
+      { path: "projects.context", input: { projectId: "p1" } },
+      { path: "agents.start", input: { agent: THREAD_AGENT, cwd: "/w/1", by: "Zack", context: "Project instructions\n\nMemory" } },
       { path: "agents.send", input: { threadId: "t1", text: input.request, turn: "queue", by: "Zack" } },
     ]);
     expect(collections.get("threads", "t1")).toMatchObject({ projectId: "p1", requestedBy: "Zack", ...workspace });

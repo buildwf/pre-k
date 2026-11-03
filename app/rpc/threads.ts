@@ -112,9 +112,15 @@ export default defineRouter({
         if (workspace) await rpc.call("workspaces.release", { worktree: workspace.worktree }).catch(() => undefined);
         if (scratch) await fs.rm(scratch, { recursive: true, force: true }).catch(() => undefined);
       };
+      // The project's instructions and memory (Project setup's `projects.context`, kept within Point's limit) become the
+      // thread's standing context. A thread still starts without it.
+      const context = await rpc.call("projects.context", { projectId }).catch(() => undefined);
+      const text = context?.ok ? z.string().min(1).safeParse(context.value) : undefined;
       const started = await rpc.call("agents.start", {
         agent: THREAD_AGENT,
         cwd: workspace?.worktree ?? scratch,
+        by: input.requestedBy,
+        ...(text?.success ? { context: text.data } : {}),
       });
       const threadId = started.ok ? z.string().safeParse(started.value) : undefined;
       if (!started.ok || !threadId?.success) {
