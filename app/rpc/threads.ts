@@ -40,13 +40,18 @@ async function projectFor(
   return id?.success ? id.data : undefined;
 }
 
-const output = z.object({
-  kind: z.literal("pr"),
-  repo: z.string(),
-  number: z.number(),
-  url: z.string().optional(),
-  title: z.string().optional(),
-});
+const repoName = z.string().regex(/^[^/\s]+\/[^/\s]+$/, "repo is owner/name");
+const outputFields = { repo: repoName, url: z.string().optional(), title: z.string().optional() };
+// A PR the thread opened, or a commit it landed on a branch without one.
+const output = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("pr"), number: z.number().int().positive(), ...outputFields }),
+  z.object({
+    kind: z.literal("commit"),
+    sha: z.string().regex(/^[0-9a-f]{7,40}$/, "sha is a hex commit id"),
+    branch: z.string().min(1),
+    ...outputFields,
+  }),
+]);
 
 const listed = z.object({
   threadId: z.string(),
@@ -55,13 +60,14 @@ const listed = z.object({
   requestedBy: z.string(),
   repo: z.string().optional(),
   branch: z.string().optional(),
-  state: z.enum(["working", "blocked", "review_ready", "done", "failed", "stopped", "interrupted", "idle"]),
+  state: z.enum(["working", "blocked", "review_ready", "landed", "done", "failed", "stopped", "interrupted", "idle"]),
   outputs: z.array(output),
   updatedAt: z.number(),
 });
 
 // The coordinator agent reads a project's threads before starting one (`"$POINT_CLI" threads list --projectId p1`);
-// a thread's agent records what it delivered (`"$POINT_CLI" threads report --kind pr --repo o/r --number 12`).
+// a thread's agent records what it delivered (`"$POINT_CLI" threads report --kind pr --repo o/r --number 12`, or
+// `--kind commit --repo o/r --sha <sha> --branch main` for work landed without a PR).
 export default defineRouter({
   // The coordinator starts a thread for a request: `"$POINT_CLI" threads start --projectId p1 --title "Add badge"
   // --request "..." --requestedBy Zack`. One worktree per thread (#12's workspaces.prepare), one Point thread in it, a
@@ -156,7 +162,7 @@ export default defineRouter({
     .handler(async ({ input, caller, collections, rpc, fail }) => {
       const projectId = await projectFor(input.projectId, caller, rpc);
       if (!projectId) return fail("NO_PROJECT", {});
-      // Point's live status. If the agents daemon is down the threads still list, as idle or review_ready.
+      // Point's live status. If the agents daemon is down the threads still list, as idle, review_ready or landed.
       const live = await rpc.call("agents.threads", undefined).catch(() => undefined);
       const parsed = live?.ok ? pointThreads.safeParse(live.value) : undefined;
       const statusOf = new Map(parsed?.success ? parsed.data.map((t) => [t.id, t.status]) : []);
@@ -169,7 +175,7 @@ export default defineRouter({
           const mine = outputs
             .filter((o) => o.threadId === t.threadId)
             .sort((a, b) => a.createdAt - b.createdAt)
-            .map(({ kind, repo, number, url, title }) => ({ kind, repo, number, url, title }));
+            .map(({ id: _id, threadId: _t, createdAt: _c, ...o }) => o);
           return {
             threadId: t.threadId,
             title: t.title,
@@ -177,7 +183,7 @@ export default defineRouter({
             requestedBy: t.requestedBy,
             repo: t.repo,
             branch: t.branch,
-            state: threadState(statusOf.get(t.threadId), t.endedAs, mine.length),
+            state: threadState(statusOf.get(t.threadId), t.endedAs, mine),
             outputs: mine,
             updatedAt: t.updatedAt,
           };
@@ -185,14 +191,8 @@ export default defineRouter({
     }),
 
   report: procedure
-    .input(
-      output.extend({
-        repo: z.string().regex(/^[^/\s]+\/[^/\s]+$/, "repo is owner/name"),
-        number: z.number().int().positive(),
-        // Required for callers other than a thread's own agent (main code such as the PR tool, the CLI).
-        threadId: z.string().optional(),
-      }),
-    )
+    // threadId is required for callers other than a thread's own agent (main code such as the PR tool, the CLI).
+    .input(output.and(z.object({ threadId: z.string().optional() })))
     .errors({
       NOT_A_THREAD: z.object({ threadId: z.string().optional() }),
       OTHER_THREAD: z.object({ threadId: z.string() }),
@@ -206,19 +206,18 @@ export default defineRouter({
       const threadId = own ?? input.threadId;
       const thread = threadId ? collections.get("threads", threadId) : undefined;
       if (!threadId || !thread) return fail("NOT_A_THREAD", { threadId });
-      const row = { threadId, kind: input.kind, repo: input.repo, number: input.number };
-      const id = outputKey(row);
+      const { threadId: _given, url, title, ...identity } = input;
+      const id = outputKey({ ...identity, threadId });
       const before = collections.get("thread-outputs", id);
       const now = Date.now();
-      await collections.upsert("thread-outputs", [
-        {
-          ...row,
-          id,
-          url: input.url ?? before?.url,
-          title: input.title ?? before?.title,
-          createdAt: before?.createdAt ?? now,
-        },
-      ]);
+      const kept = {
+        id,
+        threadId,
+        createdAt: before?.createdAt ?? now,
+        ...((url ?? before?.url) ? { url: url ?? before?.url } : {}),
+        ...((title ?? before?.title) ? { title: title ?? before?.title } : {}),
+      };
+      await collections.upsert("thread-outputs", [{ ...identity, ...kept }]);
       // Re-read after the await so a concurrent `end` (or any other edit) isn't overwritten: only touch updatedAt.
       const current = collections.get("threads", threadId) ?? thread;
       await collections.upsert("threads", [{ ...current, updatedAt: now }]);

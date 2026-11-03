@@ -4,7 +4,7 @@ import { rpc, useAgent, useCollection, useThreads } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../.point/components";
 import { ThreadPullRequest } from "../lib/ThreadPullRequest";
-import { threadState, type ThreadState } from "../threads/state";
+import { outputLabel, threadState, type ThreadState } from "../threads/state";
 import { ApprovalPrompt } from "../ui/ApprovalPrompt";
 import { Button } from "../ui/Button";
 import { Disclosure } from "../ui/Disclosure";
@@ -22,6 +22,7 @@ const stateLabel: Record<ThreadState, { text: string; tone: "default" | "muted" 
   working: { text: "working", tone: "default" },
   blocked: { text: "needs you", tone: "danger" },
   review_ready: { text: "ready for review", tone: "default" },
+  landed: { text: "landed", tone: "default" },
   done: { text: "done", tone: "muted" },
   failed: { text: "failed", tone: "danger" },
   stopped: { text: "stopped", tone: "muted" },
@@ -69,7 +70,7 @@ export function Threads({
         <List label="Threads">
           {rows.map((t) => {
             const prs = produced.filter((o) => o.threadId === t.threadId);
-            const state = stateLabel[threadState(statusOf.get(t.threadId), t.endedAs, prs.length)];
+            const state = stateLabel[threadState(statusOf.get(t.threadId), t.endedAs, prs)];
             return (
               <ListItem
                 key={t.threadId}
@@ -88,7 +89,7 @@ export function Threads({
                 )}
                 {prs.map((o) => (
                   <Text key={o.id} tone="muted">
-                    PR #{o.number}
+                    {o.kind === "pr" ? `PR #${o.number}` : `commit ${o.sha.slice(0, 7)}`}
                   </Text>
                 ))}
               </ListItem>
@@ -183,9 +184,15 @@ export function ThreadView({ threadId }: { threadId: string }) {
         <div key={u.id}>{render(u)}</div>
       ))}
       {/* What the thread delivered, read live from GitHub (Review and delivery, #1). */}
-      {prs.map((o) => (
-        <ThreadPullRequest key={o.id} repo={o.repo} number={o.number} />
-      ))}
+      {prs.map((o) =>
+        o.kind === "pr" ? (
+          <ThreadPullRequest key={o.id} repo={o.repo} number={o.number} />
+        ) : (
+          <Text key={o.id} tone="muted" mono>
+            Landed on {o.branch}: {o.title ?? outputLabel(o)}
+          </Text>
+        ),
+      )}
       <ApprovalPrompt pending={agent.pending} onDecide={agent.approve} />
       {agent.events
         .filter((e): e is typeof e & { type: "error" } => e.type === "error")

@@ -20,7 +20,7 @@ describe("relay", () => {
   it("reports a PR once the thread has worked, and only once", () => {
     const relay = createRelay();
     expect(relay([t()], s("running"))).toEqual([]);
-    const pr = { repo: "o/r", number: 12, url: "https://github.com/o/r/pull/12" };
+    const pr = { kind: "pr" as const, repo: "o/r", number: 12, url: "https://github.com/o/r/pull/12" };
     expect(relay([t({ prs: [pr] })], s("idle"))).toEqual([
       {
         projectId: "p1",
@@ -46,8 +46,8 @@ describe("relay", () => {
 
   it("stays quiet about what it saw when seeded after a restart", () => {
     const relay = createRelay();
-    expect(relay([t({ prs: [{ repo: "o/r", number: 1 }] })], s("idle"), { seed: true })).toEqual([]);
-    expect(relay([t({ prs: [{ repo: "o/r", number: 1 }] })], s("idle"))).toEqual([]);
-    expect(relay([t({ prs: [{ repo: "o/r", number: 1 }, { repo: "o/r", number: 2 }] })], s("idle"))).toHaveLength(1);
+    expect(relay([t({ prs: [{ kind: "pr" as const, repo: "o/r", number: 1 }] })], s("idle"), { seed: true })).toEqual([]);
+    expect(relay([t({ prs: [{ kind: "pr" as const, repo: "o/r", number: 1 }] })], s("idle"))).toEqual([]);
+    expect(relay([t({ prs: [{ kind: "pr" as const, repo: "o/r", number: 1 }, { kind: "pr" as const, repo: "o/r", number: 2 }] })], s("idle"))).toHaveLength(1);
   });
 });
