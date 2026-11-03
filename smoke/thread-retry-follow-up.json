@@ -3,7 +3,7 @@
   {"call": "projects.open", "input": {"id": "badges"}},
   {"call": "threads.start", "input": {"projectId": "badges", "title": "Add a README badge", "request": "Add a README badge", "requestedBy": "Zack"}},
   {"waitText": "Add a README badge"},
-  {"click": "Open"},
+  {"click": "Add a README badge"},
   {"waitText": "attempt failed"},
   {"waitText": "The harness lost its connection"},
   {"waitText": "failed: The harness lost its connection"},

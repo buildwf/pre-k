@@ -1,33 +1,45 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ThreadLandedCommit } from "../../lib/ThreadLandedCommit";
-import { rpc, useAgent, useCollection, useRpc, useStore, useThreads } from "point/client";
+import { rpc, useAgent, useCollection, useRpc, useThreads } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../../.point/components";
 import { ThreadPullRequest } from "../../lib/ThreadPullRequest";
+import { stateLabel } from "../../threads/labels";
 import { UPDATE_PREFIX } from "../../threads/relay";
 import { quietLines, threadStart } from "../../threads/started";
 import { threadState } from "../../threads/state";
 import { Alert } from "../../ui/Alert";
 import { ApprovalPrompt } from "../../ui/ApprovalPrompt";
+import { Badge } from "../../ui/Badge";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
-import { Disclosure } from "../../ui/Disclosure";
+import { Composer } from "../../ui/Composer";
 import { EmptyState } from "../../ui/EmptyState";
-import { Field } from "../../ui/Field";
-import { Heading } from "../../ui/Heading";
 import { Message } from "../../ui/Message";
 import { MessageList } from "../../ui/MessageList";
+import { PaneBody, PaneFooter, PaneHeader } from "../../ui/Pane";
 import { ProgressBar } from "../../ui/ProgressBar";
 import { Stack } from "../../ui/Stack";
 import { Text } from "../../ui/Text";
-import { TextField } from "../../ui/TextField";
 
-// Project chat: the conversation with the project's coordinator. Messages queue by default, so nothing typed while
-// the coordinator is busy interrupts it or gets lost; Steer redirects the running turn instead.
+/** What the shell hands the chat's header and body: the repository line, the panel toggle, a setup warning. */
+interface Frame {
+  /** Under the title: the project's repository and branch. */
+  subtitle?: ReactNode;
+  /** At the end of the header: the project panel's toggle. */
+  actions?: ReactNode;
+  /** Above the conversation: a repository that couldn't be linked. */
+  notice?: ReactNode;
+}
+
+// Project chat: the conversation with the project's coordinator, as the app's main view (header, scrolling
+// conversation, composer pinned at the bottom). Messages queue by default, so nothing typed while the coordinator is
+// busy interrupts it or gets lost; Steer redirects the running turn instead.
 export function ProjectChat({
   projectId,
   onOpenThread,
-}: {
+  ...frame
+}: Frame & {
   projectId: string;
   onOpenThread?: ((threadId: string) => void) | undefined;
 }) {
@@ -52,9 +64,13 @@ export function ProjectChat({
     };
   }, [projectId, attempt]);
 
+  if (threadId && !problem) return <Conversation threadId={threadId} onOpenThread={onOpenThread} {...frame} />;
+
   return (
-    <Stack gap={12}>
-      <Heading>Project chat</Heading>
+    <>
+      <PaneHeader title="Project chat" subtitle={frame.subtitle} actions={frame.actions} />
+      <PaneBody>
+      {frame.notice}
       {problem ? (
         <Alert tone="danger" title="The coordinator didn't start">
           <Stack gap={8}>
@@ -69,12 +85,11 @@ export function ProjectChat({
             </Button>
           </Stack>
         </Alert>
-      ) : threadId ? (
-        <Conversation threadId={threadId} onOpenThread={onOpenThread} />
       ) : (
         <ProgressBar label="Starting the coordinator…" />
       )}
-    </Stack>
+      </PaneBody>
+    </>
   );
 }
 
@@ -92,13 +107,15 @@ const statusWords = {
 function Conversation({
   threadId,
   onOpenThread,
-}: {
+  subtitle,
+  actions,
+  notice,
+}: Frame & {
   threadId: string;
   onOpenThread?: ((threadId: string) => void) | undefined;
 }) {
   const agent = useAgent(threadId);
   const me = useRpc(rpc.coordinator.whoami, undefined);
-  const [settings, setSettings] = useStore("settings");
   const [text, setText] = useState("");
   const [sendProblem, setSendProblem] = useState<string>();
   const name = me.data?.name;
@@ -135,12 +152,15 @@ function Conversation({
   }
 
   return (
-    <Stack gap={12}>
-      <Text tone="muted">
-        The coordinator {statusWords[agent.status]}
-        {agent.usage.costUsd > 0 ? ` · $${agent.usage.costUsd.toFixed(2)} so far` : ""}
-        {name ? ` · you're ${name}` : ""}
-      </Text>
+    <>
+      <PaneHeader
+        title="Project chat"
+        badge={busy ? <Badge tone="info">working</Badge> : undefined}
+        subtitle={subtitle}
+        actions={actions}
+      />
+      <PaneBody>
+      {notice}
       {agent.messages.length === 0 && (
         <EmptyState title="Start the project chat">
           Ask the coordinator about the project, or describe a change to the repository and it starts a thread for
@@ -151,9 +171,9 @@ function Conversation({
         {agent.messages.flatMap((m) => {
           if (m.role === "user" && m.text.startsWith(UPDATE_PREFIX))
             return [
-              <Text key={m.id} tone="muted">
+              <Message key={m.id} from="note">
                 {m.text.slice(UPDATE_PREFIX.length).trim()}
-              </Text>,
+              </Message>,
             ];
           if (m.role === "user") {
             const steer = steers.get(m.id);
@@ -212,61 +232,34 @@ function Conversation({
         </Alert>
       )}
       {sendProblem && <Alert tone="danger">{sendProblem}</Alert>}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit("queue");
-        }}
-      >
-        <Stack direction="row" gap={8} align="end">
-          <Field label="Message the coordinator">
-            <TextField
-              wide
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={busy ? "Queue a message for after this turn" : "Ask or hand off work"}
-            />
-          </Field>{" "}
-          <Button variant="primary" type="submit" disabled={!text.trim()}>
-            {busy ? "Queue" : "Send"}
-          </Button>
-          {busy && (
-            <Button type="button" onClick={() => submit("steer")} disabled={!text.trim()}>
-              Steer
-            </Button>
-          )}
-        </Stack>
-      </form>
-      {settings && (
-        <Disclosure summary={name ? `Not ${name}?` : "Your name"}>
-          <Field label="Your name" hint="Threads you ask for say you asked. Leave it empty to use your GitHub name.">
-            <TextField
-              defaultValue={settings.name ?? ""}
-              onBlur={(e) => {
-                const next = e.target.value.trim();
-                if (next === (settings.name ?? "")) return;
-                const { repo, theme } = settings;
-                void setSettings(next ? { repo, theme, name: next } : { repo, theme }).then(() => void me.refetch());
-              }}
-            />
-          </Field>
-        </Disclosure>
-      )}
-    </Stack>
+      </PaneBody>
+      <PaneFooter>
+        <Composer
+          label="Message the coordinator"
+          value={text}
+          onChange={setText}
+          onSubmit={() => submit("queue")}
+          sendLabel={busy ? "Queue" : "Send"}
+          placeholder={busy ? "Queue a message for after this turn" : "Ask about the project, or hand off work"}
+          hint={
+            <>
+              The coordinator {statusWords[agent.status]}
+              {agent.usage.costUsd > 0 ? ` · $${agent.usage.costUsd.toFixed(2)} so far` : ""}
+              {name ? ` · you're ${name}` : ""}
+            </>
+          }
+          actions={
+            busy ? (
+              <Button size="sm" variant="quiet" onClick={() => submit("steer")} disabled={!text.trim()}>
+                Steer
+              </Button>
+            ) : undefined
+          }
+        />
+      </PaneFooter>
+    </>
   );
 }
-
-const stateWords = {
-  working: "working",
-  blocked: "needs you",
-  review_ready: "ready for review",
-  landed: "landed",
-  done: "done",
-  failed: "failed",
-  stopped: "stopped",
-  interrupted: "interrupted",
-  idle: "idle",
-} as const;
 
 // The card for a thread the coordinator started: its title, live state, branch and the work it delivered.
 function StartedThread({
@@ -283,24 +276,28 @@ function StartedThread({
   const { data: prs } = useLiveQuery((q) => q.from({ o: outputs }).where(({ o }) => eq(o.threadId, threadId)));
   const row = rows[0];
   if (!row) return null;
-  const state = threadState(live.find((t) => t.id === threadId)?.status, row.endedAs, prs);
+  const state = stateLabel[threadState(live.find((t) => t.id === threadId)?.status, row.endedAs, prs)];
 
   return (
     <Card>
-      <Stack gap={8}>
-        <Stack direction="row" gap={8} align="center">
-          <Text bold>Started a thread: {row.title}</Text>
-          <Text tone="muted">{stateWords[state]}</Text>
+      <Stack gap={12}>
+        <Stack direction="row" gap={8} align="center" justify="between">
+          <Stack gap={4}>
+            <Stack direction="row" gap={8} align="center">
+              <Text bold>Started a thread: {row.title}</Text>
+              <Badge tone={state.badge}>{state.text}</Badge>
+            </Stack>
+            <Text tone="muted">
+              Asked by {row.requestedBy}
+              {row.branch ? ` · ${row.branch}` : ""}
+            </Text>
+          </Stack>
           {onOpen && (
-            <Button variant="quiet" onClick={() => onOpen(threadId)}>
+            <Button size="sm" onClick={() => onOpen(threadId)}>
               Open thread
             </Button>
           )}
         </Stack>
-        <Text tone="muted">
-          Asked by {row.requestedBy}
-          {row.branch ? ` · ${row.branch}` : ""}
-        </Text>
         {prs.map((o) =>
           o.kind === "pr" ? (
             <ThreadPullRequest key={o.id} repo={o.repo} number={o.number} />

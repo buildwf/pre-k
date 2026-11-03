@@ -14,8 +14,15 @@ export default {
   core: { disableTelemetry: true },
   // Build for the Chromium the app's windows run in, as point build does. Vite's default targets lower light-dark()
   // into a polyfill that ignores <Window scheme>, so built stories would lose the kit's colors.
-  viteFinal: (config: { build?: object }) => ({
-    ...config,
-    build: { ...config.build, target: "chrome130", cssTarget: "chrome130" },
-  }),
+  // point.vite.ts adds StyleX, which sevenyears and the kit's components are styled with.
+  viteFinal: async (config: { build?: object; plugins?: unknown[] }) => {
+    const { default: app } = await import("../point.vite.ts");
+
+    return {
+      ...config,
+      plugins: [...(config.plugins ?? []), ...app.plugins],
+      resolve: { ...("resolve" in config ? (config.resolve as object) : {}), ...app.resolve },
+      build: { ...config.build, target: "chrome130", cssTarget: "chrome130" },
+    };
+  },
 };

@@ -2,12 +2,14 @@ import { z } from "zod";
 import type { ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { color, mono, panelRadius, text } from "./theme";
+import { Icon } from "./Icon";
+import { color, mono, panelRadius, radius, text } from "./theme";
 
 /**
  * One turn in a conversation with an agent. `you` is the person's message (a tinted bubble on the right), `agent` is
  * the agent's reply (on the left, easy to read at length; a string is Markdown, as models write it), `tool` is a call
- * the agent made (one compact mono line, `title` is the tool's name). `pending` shows it is still arriving: replies
+ * the agent made (one compact mono line in a hairline chip, `title` is the tool's name), `note` is something that
+happened rather than something said (a thread's update relayed into the chat: a small muted line with a rule). `pending` shows it is still arriving: replies
  * dim, tool lines keep their contrast since they are already small and muted. Screen readers hear who said each one.
  * Each message eases in.
  *
@@ -19,12 +21,25 @@ export function Message({
   pending,
   children,
 }: {
-  from: "you" | "agent" | "tool";
+  from: "you" | "agent" | "tool" | "note";
   title?: string;
   pending?: boolean;
   children?: ReactNode;
 }) {
   const fade = pending ? { opacity: 0.6 } : {};
+
+  if (from === "note")
+    return (
+      <div
+        className="ui-enter"
+        role="note"
+        style={{ display: "flex", alignItems: "center", gap: 8, color: color.muted, fontSize: text.xs }}
+      >
+        <span style={{ flex: 1, height: 1, background: color.subtle }} />
+        <span style={{ maxWidth: "80%", textAlign: "center" }}>{children}</span>
+        <span style={{ flex: 1, height: 1, background: color.subtle }} />
+      </div>
+    );
 
   if (from === "tool")
     return (
@@ -33,7 +48,15 @@ export function Message({
         aria-busy={pending}
         style={{
           display: "flex",
+          alignItems: "center",
           gap: 8,
+          alignSelf: "flex-start",
+          maxWidth: "100%",
+          boxSizing: "border-box",
+          padding: "4px 10px",
+          border: `1px solid ${color.subtle}`,
+          borderRadius: radius,
+          background: color.sidebar,
           fontFamily: mono,
           fontSize: text.xs,
           color: color.muted,
@@ -43,6 +66,7 @@ export function Message({
         }}
       >
         <span className="ui-sr-only">Tool call: </span>
+        <Icon name="terminal" size={14} />
         <span style={{ color: color.text, fontWeight: 500 }}>{title}</span>
         <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{children}</span>
       </div>
@@ -55,9 +79,9 @@ export function Message({
         style={{
           alignSelf: "flex-end",
           maxWidth: "80%",
-          padding: "8px 12px",
+          padding: "8px 14px",
           borderRadius: panelRadius,
-          background: `color-mix(in srgb, ${color.accent} 12%, ${color.surface})`,
+          background: color.hover,
           whiteSpace: "pre-wrap",
           ...fade,
         }}

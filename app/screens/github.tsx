@@ -16,7 +16,8 @@ const source = (c: "person" | "env" | "keychain" | null) =>
  * The project's GitHub (pre-k#9, #10): connect an account with GitHub's device flow, see who pre-k acts as, and link
  * the repository its threads land on. The token stays in main; this only shows the code to type and the login.
  */
-export function GitHub({ project }: { project: Project }) {
+// `link` false leaves out the Repository field, for Project settings, which links the repository in its own section.
+export function GitHub({ project, link = true }: { project: Project; link?: boolean }) {
   const { connectors, pending, error, connect, cancel, disconnect } = useConnectors();
   const github = connectors?.find((c) => c.name === "github");
   const me = useRpc(rpc.github.me);
@@ -27,7 +28,7 @@ export function GitHub({ project }: { project: Project }) {
 
   return (
     <Stack gap={12}>
-      <Heading level={2}>GitHub</Heading>
+      {link && <Heading level={2}>GitHub</Heading>}
       {login ? (
         <Stack direction="row" gap={8} align="center" justify="between" wrap>
           <Text>
@@ -83,7 +84,7 @@ export function GitHub({ project }: { project: Project }) {
           {error && <Text tone="danger">{error}</Text>}
         </Stack>
       )}
-      {login && <LinkRepo key={project.id} project={project} />}
+      {login && link && <LinkRepo key={project.id} project={project} />}
     </Stack>
   );
 }

@@ -8,6 +8,12 @@ export const color = {
   page: "var(--ui-page)",
   /** Controls and panels on the page. */
   surface: "var(--ui-surface)",
+  /** The sidebar and panels behind the content. */
+  sidebar: "var(--ui-sidebar)",
+  /** The selected row in a list or the sidebar. */
+  selected: "var(--ui-selected)",
+  success: "var(--ui-success)",
+  warning: "var(--ui-warning)",
   /** A control or row under the pointer. */
   hover: "var(--ui-hover)",
   text: "var(--ui-text)",

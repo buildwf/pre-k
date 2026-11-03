@@ -3,7 +3,6 @@ import { eq, useLiveQuery } from "point/cloud/db";
 import { ThreadPullRequest } from "../lib/ThreadPullRequest";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
-import { Heading } from "../ui/Heading";
 import { ThreadLandedCommit } from "../lib/ThreadLandedCommit";
 import { Stack } from "../ui/Stack";
 import { Text } from "../ui/Text";
@@ -22,7 +21,6 @@ export function Delivered({ projectId, onOpen }: { projectId: string; onOpen: (t
 
   return (
     <Stack gap={12}>
-      <Heading level={2}>Delivered</Heading>
       {rows.length === 0 ? (
         <EmptyState title="Nothing delivered yet">
           When a thread lands its work on main, it shows up here.

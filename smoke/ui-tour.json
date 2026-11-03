@@ -7,7 +7,7 @@
   { "press": "Enter" },
   { "waitText": "Started a thread: Add a README badge" },
   { "waitText": "finished its turn without landing any work." },
-  { "click": "Open" },
+  { "click": "Add a README badge" },
   { "waitText": "could not commit" },
   { "click": "Project settings" },
   { "waitText": "Instructions" }

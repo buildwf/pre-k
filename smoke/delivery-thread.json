@@ -3,6 +3,6 @@
   { "call": "projects.open", "input": { "id": "badges" } },
   { "call": "threads.start", "input": { "projectId": "badges", "title": "Add a README badge", "request": "Add a README badge", "requestedBy": "Zack" } },
   { "waitText": "Add a README badge" },
-  { "click": "Open" },
+  { "click": "Add a README badge" },
   { "waitText": "Opened PR #12" }
 ]

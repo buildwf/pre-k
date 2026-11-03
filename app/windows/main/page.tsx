@@ -1,191 +1,110 @@
 import { useState } from "react";
-import { z } from "zod";
-import { rpc, useAgent, useStore } from "point/client";
-import { render } from "../../../.point/components";
-import { persona, type Persona } from "../../schemas/persona";
+import { ProjectPanel } from "../../screens/panel";
 import { Delivered } from "../../screens/delivered";
 import { GitHub } from "../../screens/github";
-import { Projects } from "../../screens/projects";
-import { Threads } from "../../screens/threads";
-import { ApprovalPrompt } from "../../ui/ApprovalPrompt";
+import { YourName } from "../../screens/you";
+import { Memory, ProjectSettings, Projects, ProjectSwitcher } from "../../screens/projects";
+import { ThreadNav, ThreadView } from "../../screens/threads";
+import { AppShell } from "../../ui/AppShell";
 import { Button } from "../../ui/Button";
-import { Disclosure } from "../../ui/Disclosure";
-import { EmptyState } from "../../ui/EmptyState";
-import { Field } from "../../ui/Field";
-import { Message } from "../../ui/Message";
-import { MessageList } from "../../ui/MessageList";
+import { Icon } from "../../ui/Icon";
+import { PaneBody, PaneHeader } from "../../ui/Pane";
+import { Section } from "../../ui/Section";
+import { Sidebar, SidebarGroup, SidebarItem } from "../../ui/Sidebar";
 import { Window } from "../../ui/Window";
-import { Stack } from "../../ui/Stack";
-import { Text } from "../../ui/Text";
-import { TextArea } from "../../ui/TextArea";
-import { TextField } from "../../ui/TextField";
 import { ProjectChat } from "./ProjectChat";
 
+/** What the middle column shows. The project chat is home; a thread, Delivered and Settings open from the sidebar. */
+type View = { kind: "chat" } | { kind: "thread"; threadId: string } | { kind: "delivered" } | { kind: "settings" };
+
 export default function Page() {
-  const [settings, setSettings] = useStore("settings");
-  const [personas, setPersonas] = useStore("personas");
-  const [threadId, setThreadId] = useState<string>();
-  const [problem, setProblem] = useState<string>();
-  const [openThread, setOpenThread] = useState<string>();
-
-  if (!settings || !personas) return null;
-
-  const start = async (persona?: Persona) => {
-    const base = { agent: "coder", cwd: settings.repo };
-
-    const r = await rpc.agents.start(
-      persona
-        ? {
-            ...base,
-            persona: persona.model
-              ? { name: persona.name, instructions: persona.instructions, model: persona.model }
-              : { name: persona.name, instructions: persona.instructions },
-          }
-        : base,
-    );
-
-    if (r.ok) {
-      setThreadId(r.value);
-
-      if (persona) void setPersonas({ ...personas, lastUsed: persona.id });
-    } else setProblem(`${r.failure.code}: ${JSON.stringify(r.failure.detail)}`);
-  };
-
   return (
     <Window>
-      <Stack padding={24} maxWidth={800} gap={16}>
-        <Projects>
-          {(project) => (
-            <>
-        <GitHub project={project} />
-        <ProjectChat key={project.id} projectId={project.id} onOpenThread={setOpenThread} />
-        <Field label="Repository">
-          <TextField
-            value={settings.repo}
-            onChange={(e) => setSettings({ ...settings, repo: e.target.value })}
-          />
-        </Field>
-        <Stack direction="row" gap={8} align="center" wrap>
-          <Button variant="primary" onClick={() => start()}>
-            New thread
-          </Button>
-          {personas.personas.map((p) => (
-            <Button key={p.id} onClick={() => start(p)} accent={p.color} title={p.instructions}>
-              As {p.name}
-            </Button>
-          ))}
-        </Stack>
-        <Disclosure summary="Import persona">
-          <TextArea
-            aria-label="Persona JSON"
-            placeholder='{"name": "...", "instructions": "..."}'
-            onBlur={(e) => {
-              try {
-                const p = persona.omit({ id: true }).parse(JSON.parse(e.target.value));
-                void setPersonas({
-                  ...personas,
-                  personas: [...personas.personas, { id: String(Date.now()), ...p }],
-                });
-                e.target.value = "";
-              } catch (err) {
-                setProblem(String(err));
-              }
-            }}
-          />
-        </Disclosure>
-        {problem && <Text tone="danger">{problem}</Text>}
-        <Threads key={project.id} projectId={project.id} open={openThread} onOpen={setOpenThread} />
-        <Delivered key={`delivered-${project.id}`} projectId={project.id} onOpen={setOpenThread} />
-        {threadId ? (
-          <Chat threadId={threadId} />
-        ) : (
-          <EmptyState title="No thread yet">
-            Start one and the coder works in the repository above. Approve its file writes as they
-            come.
-          </EmptyState>
-        )}
-            </>
-          )}
-        </Projects>
-      </Stack>
+      <Projects>{(view) => <Workspace key={view.project.id} {...view} />}</Projects>
     </Window>
   );
 }
 
-function Chat({ threadId }: { threadId: string }) {
-  const agent = useAgent(threadId);
-  const [text, setText] = useState("");
+function Workspace({ project, projects, newProject, notice }: Parameters<Parameters<typeof Projects>[0]["children"]>[0]) {
+  const [view, setView] = useState<View>({ kind: "chat" });
+  const [panel, setPanel] = useState(true);
+  const openThread = (threadId: string) => setView({ kind: "thread", threadId });
+  const repo = project.repo ? `${project.repo} · ${project.defaultBranch ?? "default branch"}` : "No repository linked";
+  const panelToggle = (
+    <Button
+      size="icon"
+      variant="quiet"
+      aria-label={panel ? "Hide project panel" : "Show project panel"}
+      aria-pressed={panel}
+      onClick={() => setPanel(!panel)}
+    >
+      <Icon name="panelRight" />
+    </Button>
+  );
 
   return (
-    <Stack gap={12}>
-      <Stack direction="row" gap={8} align="center">
-        <Text tone="muted">
-          {agent.persona ? `${agent.persona.name} · ` : ""}
-          {agent.status} · ${agent.usage.costUsd.toFixed(3)}
-        </Text>
-        <Button variant="quiet" disabled={!agent.can.cancel} onClick={() => agent.cancel()}>
-          Cancel
-        </Button>{" "}
-        <Button variant="quiet" disabled={!agent.can.pause} onClick={() => agent.pause()}>
-          Pause
-        </Button>{" "}
-        <Button variant="quiet" disabled={!agent.can.resume} onClick={() => agent.resume()}>
-          Resume
-        </Button>
-      </Stack>
-      <MessageList>
-        {agent.messages.map((m) =>
-          m.role === "tool" ? (
-            <Message key={m.id} from="tool" title={m.name ?? "tool"} pending={!m.done}>
-              {JSON.stringify(m.input)}
-              {m.done && m.output !== undefined
-                ? ` → ${z.string().safeParse(m.output).data ?? JSON.stringify(m.output)}`
-                : ""}
-            </Message>
-          ) : m.role === "reasoning" ? (
-            <Disclosure key={m.id} summary={m.done ? "Thinking" : "Thinking…"}>
-              <Text tone="muted">{m.text}</Text>
-            </Disclosure>
-          ) : (
-            <Message key={m.id} from={m.role === "user" ? "you" : "agent"} pending={!m.done}>
-              {m.text}
-            </Message>
-          ),
-        )}
-      </MessageList>
-      {/* props were validated by the runtime before the ui event */}
-      {agent.ui.map((u) => (
-        <div key={u.id}>{render(u)}</div>
-      ))}
-      <ApprovalPrompt pending={agent.pending} onDecide={agent.approve} />
-      {agent.events
-        .filter((e): e is typeof e & { type: "error" } => e.type === "error")
-        .slice(-1)
-        .map((e) => (
-          <Text key={e.id} tone="danger">
-            {e.message}
-          </Text>
-        ))}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void agent.send(text);
-          setText("");
-        }}
-      >
-        <Stack direction="row" gap={8}>
-          <TextField
-            wide
-            aria-label="Message"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Ask the coder (a message mid-turn steers it)"
-          />{" "}
-          <Button variant="primary" type="submit">
-            Send
-          </Button>
-        </Stack>
-      </form>
-    </Stack>
+    <AppShell
+      sidebar={
+        <Sidebar
+          header={<ProjectSwitcher project={project} projects={projects} onNew={newProject} />}
+          footer={
+            <SidebarGroup>
+              <SidebarItem icon="settings" active={view.kind === "settings"} onClick={() => setView({ kind: "settings" })}>
+                Project settings
+              </SidebarItem>
+            </SidebarGroup>
+          }
+        >
+          <SidebarGroup>
+            <SidebarItem icon="chat" active={view.kind === "chat"} onClick={() => setView({ kind: "chat" })}>
+              Project chat
+            </SidebarItem>
+            <SidebarItem icon="package" active={view.kind === "delivered"} onClick={() => setView({ kind: "delivered" })}>
+              Delivered
+            </SidebarItem>
+          </SidebarGroup>
+          <ThreadNav projectId={project.id} open={view.kind === "thread" ? view.threadId : undefined} onOpen={openThread} />
+        </Sidebar>
+      }
+      aside={
+        view.kind === "chat" && panel ? (
+          <ProjectPanel project={project} onEdit={() => setView({ kind: "settings" })} memory={<Memory projectId={project.id} compact />} />
+        ) : undefined
+      }
+    >
+      {view.kind === "chat" && (
+        <ProjectChat
+          projectId={project.id}
+          subtitle={repo}
+          actions={panelToggle}
+          notice={notice}
+          onOpenThread={openThread}
+        />
+      )}
+      {view.kind === "thread" && <ThreadView key={view.threadId} threadId={view.threadId} />}
+      {view.kind === "delivered" && (
+        <>
+          <PaneHeader title="Delivered" subtitle="Everything this project's threads landed, newest first" />
+          <PaneBody>
+            <Delivered projectId={project.id} onOpen={openThread} />
+          </PaneBody>
+        </>
+      )}
+      {view.kind === "settings" && (
+        <>
+          <PaneHeader title="Project settings" subtitle={repo} />
+          <PaneBody wide>
+            {notice}
+            <Section title="GitHub">
+              <GitHub project={project} link={false} />
+            </Section>
+            <ProjectSettings project={project} />
+            <Section title="You">
+              <YourName />
+            </Section>
+          </PaneBody>
+        </>
+      )}
+    </AppShell>
   );
 }

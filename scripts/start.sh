@@ -9,7 +9,7 @@
 #    A fresh clone starts at point.lock's commit. An existing Point checkout on main with no local changes is pulled when it's older than point.lock's commit;
 #    one on another branch or with changes is left alone, with a warning if it's too old.
 # 3. Builds Point when its build is older than its checkout.
-# 4. Installs pre-k (bun) and Electron.
+# 4. Clones sevenyears (the design system) next to this repo if missing, installs pre-k (bun) and Electron.
 # 5. Opens the app (bun run dev). Quit with Ctrl-C.
 #
 # Command output goes to .point/start.log; a failing step prints its end and the fix.
@@ -122,6 +122,12 @@ else
 fi
 
 step 4 "Installing pre-k"
+# sevenyears is pre-k's design system (docs/design.md): a private repo next to this one, installed as a file: copy.
+if [ ! -d ../sevenyears/.git ]; then
+  note "cloning sevenyears into ../sevenyears"
+  run "check the network and that you can read github.com/buildwf/sevenyears" \
+    git clone -q https://github.com/buildwf/sevenyears.git ../sevenyears
+fi
 run "bun install failed: see the log (it needs the network)" bun install
 run "Electron's download failed: check the network and run sh scripts/start.sh again" bunx install-electron
 note "dependencies and Electron ready"

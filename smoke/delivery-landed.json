@@ -33,6 +33,9 @@
     "timeoutMs": 60000
   },
   {
+    "click": "Delivered"
+  },
+  {
     "waitText": "From “Add a README badge”"
   },
   {

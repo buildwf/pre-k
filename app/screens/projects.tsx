@@ -6,11 +6,14 @@ import { builderHarness, builderHarnesses, type BuilderHarness } from "../schema
 import type { Project, ProjectChange } from "../schemas/project";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
-import { Disclosure } from "../ui/Disclosure";
 import { Field } from "../ui/Field";
 import { EmptyState } from "../ui/EmptyState";
 import { Heading } from "../ui/Heading";
 import { List, ListItem } from "../ui/List";
+import { Icon } from "../ui/Icon";
+import { Mark } from "../ui/Mark";
+import { Menu } from "../ui/Menu";
+import { Section } from "../ui/Section";
 import { Select } from "../ui/Select";
 import { Stack } from "../ui/Stack";
 import { Text } from "../ui/Text";
@@ -28,15 +31,25 @@ async function linkRepo(projectId: string, text: string): Promise<LinkResult> {
   return r.ok ? { ok: true } : { ok: false, message: linkFailure(r.failure.code, r.failure.detail, repo) };
 }
 
-// Shows the first-run form until a project exists, then the open project (the most recently opened) with a switcher
-// and its settings above `children`.
-export function Projects({ children }: { children: (project: Project) => ReactNode }) {
+export interface ProjectsView {
+  /** The open project: the most recently opened. */
+  project: Project;
+  /** Every project, most recently opened first, for the switcher. */
+  projects: readonly Project[];
+  /** Shows the New project form in place of the app. */
+  newProject: () => void;
+  /** A warning to show above the open view (a repository that couldn't be linked on create), or null. */
+  notice: ReactNode;
+}
+
+// Shows the first-run form until a project exists (or while adding one), then hands the open project to the app shell.
+export function Projects({ children }: { children: (view: ProjectsView) => ReactNode }) {
   const projects = useCollection("projects");
   const { data, isLoading } = useLiveQuery((q) =>
     q.from({ p: projects }).orderBy(({ p }) => p.lastOpenedAt, "desc"),
   );
   const [adding, setAdding] = useState(false);
-  // A repo that couldn't be linked while creating: the project exists, and settings open on the Repository field.
+  // A repo that couldn't be linked while creating: the project exists, and the notice offers the Repository field.
   const [unlinked, setUnlinked] = useState<{ projectId: string; repo: string; message: string }>();
 
   if (isLoading) return null;
@@ -45,49 +58,66 @@ export function Projects({ children }: { children: (project: Project) => ReactNo
 
   if (!current || adding)
     return (
-      <NewProject
-        first={!current}
-        onDone={(failed) => {
-          setUnlinked(failed);
-          setAdding(false);
-        }}
-        onCancel={current ? () => setAdding(false) : undefined}
-      />
+      <Centered>
+        <NewProject
+          first={!current}
+          onDone={(failed) => {
+            setUnlinked(failed);
+            setAdding(false);
+          }}
+          onCancel={current ? () => setAdding(false) : undefined}
+        />
+      </Centered>
     );
 
-  const notice = unlinked?.projectId === current.id ? unlinked : undefined;
-
-  return (
-    <Stack gap={16}>
-      <Stack direction="row" gap={8} align="center" justify="between" wrap>
-        <Stack gap={4}>
-          <Heading>{current.name}</Heading>
-          <Text tone="muted">
-            {current.repo ? `${current.repo} · ${current.defaultBranch ?? "default branch"}` : "No repository linked"}
-          </Text>
-        </Stack>
-        <Stack direction="row" gap={8} align="center">
-          {data.length > 1 && (
-            <Select
-              label="Project"
-              value={current.id}
-              options={data.map((p) => ({ value: p.id, label: p.name }))}
-              onChange={(id) => void rpc.projects.open({ id })}
-            />
-          )}
-          <Button onClick={() => setAdding(true)}>New project</Button>
-        </Stack>
-      </Stack>
-      <Alert tone="attention" title={notice ? `Created ${current.name}, but ${notice.repo} isn't linked` : undefined}>
-        {notice?.message}
+  const failed = unlinked?.projectId === current.id ? unlinked : undefined;
+  const notice = failed ? (
+    <Stack gap={8}>
+      <Alert tone="attention" title={`Created ${current.name}, but ${failed.repo} isn't linked`}>
+        {failed.message}
       </Alert>
-      {notice && (
-        <RepositoryField key={current.id} project={current} initial={notice.repo} onLinked={() => setUnlinked(undefined)} />
-      )}
-      <Disclosure summary="Project settings">
-        <ProjectSettings key={current.id} project={current} />
-      </Disclosure>
-      {children(current)}
+      <RepositoryField key={current.id} project={current} initial={failed.repo} onLinked={() => setUnlinked(undefined)} />
+    </Stack>
+  ) : null;
+
+  return children({ project: current, projects: data, newProject: () => setAdding(true), notice });
+}
+
+/** The project switcher at the top of the sidebar: the open project and its repository, and a menu of the others. */
+export function ProjectSwitcher({ project, projects, onNew }: { project: Project; projects: readonly Project[]; onNew: () => void }) {
+  return (
+    <Stack direction="row" gap={4} align="center">
+    <Menu
+      wide
+      label={`Project: ${project.name}`}
+      heading="Projects"
+      trigger={
+        <Stack direction="row" gap={8} align="center">
+          <Mark name={project.name} />
+          <Text bold>{project.name}</Text>
+        </Stack>
+      }
+      items={[
+        ...projects.map((p) => ({
+          label: p.id === project.id ? `${p.name} (open)` : p.name,
+          disabled: p.id === project.id,
+          onSelect: () => void rpc.projects.open({ id: p.id }),
+        })),
+        { label: "New project", onSelect: onNew, separated: true },
+      ]}
+    />
+    <Button size="icon" variant="quiet" aria-label="New project" title="New project" onClick={onNew}>
+      <Icon name="plus" />
+    </Button>
+    </Stack>
+  );
+}
+
+/** A form on its own, centered in the window: the first-run and New project screens. */
+function Centered({ children }: { children: ReactNode }) {
+  return (
+    <Stack padding={48} maxWidth={560}>
+      {children}
     </Stack>
   );
 }
@@ -190,7 +220,7 @@ function GitHubStatus() {
 
 // Each change saves on blur, so typing doesn't write a row per keystroke. A field shows the saved value until you
 // edit it, so a change made elsewhere (the CLI, an agent, another window) shows here and a blur never writes it back.
-function ProjectSettings({ project }: { project: Project }) {
+export function ProjectSettings({ project }: { project: Project }) {
   const [name, setName] = useState<string>();
   const [instructions, setInstructions] = useState<string>();
   const [status, setStatus] = useState("");
@@ -202,8 +232,11 @@ function ProjectSettings({ project }: { project: Project }) {
   };
 
   return (
-    <Stack gap={16} padding={8}>
-      <Repository project={project} />
+    <>
+      <Section title="Repository" description="Threads clone it and work on their own branch.">
+        <Repository project={project} />
+      </Section>
+      <Section title="General">
       <Field label="Name">
         <TextField
           value={name ?? project.name}
@@ -224,7 +257,12 @@ function ProjectSettings({ project }: { project: Project }) {
           }}
         />
       </Field>
-      <Field label="Coding agent" hint="New threads in this project run it. Threads already running keep theirs.">
+      <Text tone="muted" role="status">
+        {status}
+      </Text>
+      </Section>
+      <Section title="Coding agent" description="New threads in this project run it. Threads already running keep theirs.">
+      <Field label="Coding agent">
         <Select
           value={project.harness ?? "claude-code"}
           options={builderHarness.options.map((h) => ({ value: h, label: builderHarnesses[h].label }))}
@@ -232,11 +270,11 @@ function ProjectSettings({ project }: { project: Project }) {
         />
       </Field>
       <SignInState harness={project.harness ?? "claude-code"} />
-      <Text tone="muted" role="status">
-        {status}
-      </Text>
-      <Memory projectId={project.id} />
-    </Stack>
+      </Section>
+      <Section title="Memory" description="What agents saved for later threads, and notes you add. Every thread reads it.">
+        <Memory projectId={project.id} />
+      </Section>
+    </>
   );
 }
 
@@ -256,7 +294,6 @@ function Repository({ project }: { project: Project }) {
 
   return (
     <Stack gap={4}>
-      <Text bold>Repository</Text>
       <Stack direction="row" gap={8} align="center" justify="between">
         <Text>
           {project.repo} · threads branch from {project.defaultBranch ?? "the default branch"}
@@ -358,7 +395,8 @@ function SignInState({ harness }: { harness: BuilderHarness }) {
 }
 
 // What agents saved for later threads (and what the person adds). Agents read it with `projects context`.
-function Memory({ projectId }: { projectId: string }) {
+// `compact` is the project panel's version: a short line when empty, and the list without dates.
+export function Memory({ projectId, compact }: { projectId: string; compact?: boolean }) {
   const memory = useCollection("memory");
   const { data } = useLiveQuery(
     (q) => q.from({ n: memory }).where(({ n }) => eq(n.projectId, projectId)).orderBy(({ n }) => n.at, "asc"),
@@ -368,8 +406,9 @@ function Memory({ projectId }: { projectId: string }) {
 
   return (
     <Stack gap={8}>
-      <Heading level={2}>Memory</Heading>
-      {data.length === 0 ? (
+      {data.length === 0 && compact ? (
+        <Text tone="muted">Nothing saved yet. Agents save what a later thread should know, and you can add a note.</Text>
+      ) : data.length === 0 ? (
         <EmptyState title="Nothing saved yet">
           Agents save what a later thread should know. You can add a note too.
         </EmptyState>
@@ -386,7 +425,8 @@ function Memory({ projectId }: { projectId: string }) {
             >
               <Text>{n.text}</Text>
               <Text tone="muted">
-                {n.savedBy === "person" ? "you" : "a thread"} · {new Date(n.at).toLocaleDateString()}
+                {n.savedBy === "person" ? "you" : "a thread"}
+                {compact ? "" : ` · ${new Date(n.at).toLocaleDateString()}`}
               </Text>
             </ListItem>
           ))}
@@ -405,7 +445,7 @@ function Memory({ projectId }: { projectId: string }) {
           <Field label="Add a note" wide error={problem}>
             <TextField value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
-          <Button type="submit" disabled={!text.trim()}>
+          <Button type="submit" size={compact ? "sm" : "default"} disabled={!text.trim()}>
             Add
           </Button>
         </Stack>

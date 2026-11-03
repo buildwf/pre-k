@@ -5,45 +5,68 @@
  *
  * The class names below are for components in app/ui/ only. Windows never use them: they use the components.
  */
+@font-face {
+  font-family: "Geist";
+  src: url("./fonts/Geist.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("./fonts/GeistMono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+html,
 body {
   margin: 0;
+  height: 100%;
 }
 
 :root {
+  /* pre-k's palette is sevenyears' (buildwf/sevenyears, src/tokens.stylex.ts): shadcn zinc with a violet primary. The
+     components built on sevenyears read its tokens directly; these carry the same values for the rest of the kit. */
   color-scheme: light dark;
-  --ui-page: light-dark(#fafafa, #111113);
-  --ui-surface: light-dark(#fff, #1c1c1f);
+  --ui-page: light-dark(#ffffff, #121214);
+  --ui-surface: light-dark(#ffffff, #18181b);
+  /* The sidebar and other panels that sit behind the content. */
+  --ui-sidebar: light-dark(#f7f7f8, #0e0e10);
   /* A control or row under the pointer. */
-  --ui-hover: light-dark(#f4f4f5, #26262a);
-  --ui-text: light-dark(#18181b, #ececef);
-  --ui-muted: light-dark(#6b6b74, #a1a1aa);
-  --ui-danger: light-dark(#c62828, #ff7b72);
-  /* A control's edge (fields, buttons, segments): at least 3:1 against page and surface, as WCAG 1.4.11 asks. */
-  --ui-border: light-dark(#8a8a93, #71717a);
-  --ui-subtle: light-dark(#e4e4e7, #2a2a2e);
-  --ui-attention: light-dark(#fff8db, #3b3420);
+  --ui-hover: light-dark(#f4f4f5, #1f1f23);
+  /* The selected row in a list or sidebar. */
+  --ui-selected: light-dark(#e9e9ec, #26262b);
+  --ui-text: light-dark(#09090b, #fafafa);
+  --ui-muted: light-dark(#5b5b66, #a1a1aa);
+  --ui-danger: light-dark(#dc2626, #f87171);
+  --ui-success: light-dark(#16a34a, #22c55e);
+  --ui-warning: light-dark(#d97706, #fbbf24);
+  /* A control's edge (fields, buttons, segments). */
+  --ui-border: light-dark(#d4d4d8, #3f3f46);
+  --ui-subtle: light-dark(#e4e4e7, #27272a);
+  --ui-attention: light-dark(#fffbeb, #2a2110);
   /* The edge of a warning, against --ui-attention. */
-  --ui-attention-edge: light-dark(#b7791f, #d69e2e);
-  --ui-accent: light-dark(#2563eb, #6ea8fe);
-  --ui-on-accent: light-dark(#fff, #0b1a33);
+  --ui-attention-edge: light-dark(#d97706, #fbbf24);
+  --ui-accent: light-dark(#7c3aed, #8b5cf6);
+  --ui-on-accent: #ffffff;
 
-  --ui-font: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --ui-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --ui-font: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ui-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
   /* The type scale: every font size in the kit is one of these. Body text is md. */
   --ui-text-xs: 12px;
   --ui-text-sm: 13px;
   --ui-text-md: 14px;
-  --ui-text-lg: 15px;
+  --ui-text-lg: 16px;
   --ui-text-xl: 18px;
-  --ui-text-2xl: 24px;
-  --ui-radius: 6px;
+  --ui-text-2xl: 22px;
+  --ui-radius: 8px;
   /* Panels and cards, a step rounder than the controls in them. */
-  --ui-radius-panel: 10px;
-  --ui-shadow: 0 1px 2px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.4));
+  --ui-radius-panel: 12px;
+  --ui-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
 
   /* Motion: fast for state changes (hover, press, focus), base for things arriving or opening. */
   --ui-fast: 120ms;
-  --ui-base: 200ms;
+  --ui-base: 220ms;
   --ui-ease: cubic-bezier(0.2, 0, 0, 1);
   interpolate-size: allow-keywords;
 }
