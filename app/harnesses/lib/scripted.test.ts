@@ -171,7 +171,7 @@ test("the coordinator starts a thread for a request and answers a question in te
   const events = await turnEnd(o, 2);
 
   expect(fs.readFileSync(cliLog, "utf8").trim().split("\n")).toEqual([
-    "threads start --title Add a README badge --request Add a README badge --json",
+    "threads start --title Add a README badge --request Add a README badge --requestedBy Person --json",
   ]);
   expect(texts(events)).toContain("Started a thread for “Add a README badge”.");
   expect(texts(events).at(-1)).toMatch(/^I'm the scripted coordinator/);

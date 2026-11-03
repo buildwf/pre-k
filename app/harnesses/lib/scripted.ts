@@ -12,9 +12,12 @@ export const commands = {
   /** #14: push the thread's branch and open its PR; main reads repo, branch and base from the thread record. */
   openPullRequest: (title: string, body: string) =>
     `"$POINT_CLI" github openPullRequest --title ${sh(title)} --body ${sh(body)} --json`,
-  /** #6/#13: the coordinator starts a thread for a request. */
-  startThread: (title: string, request: string) =>
-    `"$POINT_CLI" threads start --title ${sh(title)} --request ${sh(request)} --json`,
+  /**
+   * #6/#13: the coordinator starts a thread for a request. The project comes from the caller (#25); `requestedBy` is
+   * required by #6. A harness isn't told who sent a message, so the scripted coordinator names a fixed person.
+   */
+  startThread: (title: string, request: string, requestedBy = "Person") =>
+    `"$POINT_CLI" threads start --title ${sh(title)} --request ${sh(request)} --requestedBy ${sh(requestedBy)} --json`,
 };
 
 /** Quote one shell argument. */
