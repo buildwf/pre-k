@@ -30,7 +30,7 @@ const words: Record<ThreadState, string> = {
   failed: "failed",
   stopped: "was stopped",
   interrupted: "was interrupted",
-  idle: "finished its turn without opening a PR",
+  idle: "finished its turn without landing any work",
 };
 
 /**

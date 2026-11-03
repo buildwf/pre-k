@@ -36,7 +36,7 @@ describe("relay", () => {
     relay([t()], s("running"));
     expect(relay([t()], s("parked"))[0]?.text).toContain("waiting for you");
     expect(relay([t()], s("running"))).toEqual([]);
-    expect(relay([t()], s("idle"))[0]?.text).toContain("without opening a PR");
+    expect(relay([t()], s("idle"))[0]?.text).toContain("without landing any work");
   });
 
   it("reports a thread someone ended even if it never ran", () => {
