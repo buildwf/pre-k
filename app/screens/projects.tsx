@@ -104,10 +104,11 @@ function NewProject({ onDone, onCancel }: { onDone: () => void; onCancel?: (() =
   );
 }
 
-// Each change saves on blur, so typing doesn't write a row per keystroke.
+// Each change saves on blur, so typing doesn't write a row per keystroke. A field shows the saved value until you
+// edit it, so a change made elsewhere (the CLI, an agent, another window) shows here and a blur never writes it back.
 function ProjectSettings({ project }: { project: Project }) {
-  const [name, setName] = useState(project.name);
-  const [instructions, setInstructions] = useState(project.instructions);
+  const [name, setName] = useState<string>();
+  const [instructions, setInstructions] = useState<string>();
   const [status, setStatus] = useState("");
 
   const save = async (change: Omit<ProjectChange, "id">) => {
@@ -120,16 +121,22 @@ function ProjectSettings({ project }: { project: Project }) {
     <Stack gap={16} padding={8}>
       <Field label="Name">
         <TextField
-          value={name}
+          value={name ?? project.name}
           onChange={(e) => setName(e.target.value)}
-          onBlur={() => name !== project.name && void save({ name })}
+          onBlur={async () => {
+            if (name !== undefined && name !== project.name) await save({ name });
+            setName(undefined);
+          }}
         />
       </Field>
       <Field label="Instructions" hint="Applies to threads started after you change it.">
         <TextArea
-          value={instructions}
+          value={instructions ?? project.instructions}
           onChange={(e) => setInstructions(e.target.value)}
-          onBlur={() => instructions !== project.instructions && void save({ instructions })}
+          onBlur={async () => {
+            if (instructions !== undefined && instructions !== project.instructions) await save({ instructions });
+            setInstructions(undefined);
+          }}
         />
       </Field>
       <Text tone="muted" role="status">
