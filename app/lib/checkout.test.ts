@@ -80,7 +80,7 @@ describe("checkout", () => {
     expect(
       await publishBranch({ worktree: wt, branch: "pre-k/empty-0003", base: "main", message: "m", author, token: null }),
     ).toMatchObject({ ok: false, reason: "no-changes" });
-    expect(await releaseWorktree({ dir, worktree: wt, branch: "pre-k/empty-0003", base: "main" })).toEqual({
+    expect(await releaseWorktree({ dir, worktree: wt, branch: "pre-k/empty-0003", base: "main", token: null })).toEqual({
       removed: true,
     });
   });
@@ -92,7 +92,7 @@ describe("checkout", () => {
     await addWorktree({ dir, base: "main", branch, worktree: wt });
     fs.writeFileSync(path.join(wt, "NOTES.md"), "from the agent\n");
 
-    expect(await releaseWorktree({ dir, worktree: wt, branch, base: "main" })).toEqual({
+    expect(await releaseWorktree({ dir, worktree: wt, branch, base: "main", token: null })).toEqual({
       removed: false,
       reason: "uncommitted",
     });
@@ -105,13 +105,13 @@ describe("checkout", () => {
     fs.writeFileSync(path.join(wt, "MORE.md"), "more\n");
     sh(wt, "add", "MORE.md");
     sh(wt, "-c", "user.name=a", "-c", "user.email=a@b.c", "commit", "-q", "-m", "more");
-    expect(await releaseWorktree({ dir, worktree: wt, branch, base: "main" })).toEqual({
+    expect(await releaseWorktree({ dir, worktree: wt, branch, base: "main", token: null })).toEqual({
       removed: false,
       reason: "unpushed",
     });
 
     await publishBranch({ worktree: wt, branch, base: "main", message: "unused", author, token: null });
-    expect(await releaseWorktree({ dir, worktree: wt, branch, base: "main" })).toEqual({ removed: true });
+    expect(await releaseWorktree({ dir, worktree: wt, branch, base: "main", token: null })).toEqual({ removed: true });
     expect(fs.existsSync(wt)).toBe(false);
   });
 

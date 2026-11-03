@@ -95,11 +95,16 @@ export async function addWorktree(o: { dir: string; base: string; branch: string
 }
 
 /** Commits on the branch that `origin/<branch>` doesn't have yet (all of them before the first push). */
-async function unpushed(worktree: string, branch: string, base: string): Promise<number> {
-  const remote = await git(worktree, ["ls-remote", "--heads", "origin", branch]);
+async function unpushed(
+  worktree: string,
+  branch: string,
+  base: string,
+  token: string | null,
+): Promise<number> {
+  const remote = await git(worktree, ["ls-remote", "--heads", "origin", branch], token);
   const since = remote ? `origin/${branch}` : `origin/${base}`;
 
-  if (remote) await git(worktree, ["fetch", "--quiet", "origin", branch]);
+  if (remote) await git(worktree, ["fetch", "--quiet", "origin", branch], token);
 
   return Number(await git(worktree, ["rev-list", "--count", `${since}..HEAD`]));
 }
@@ -115,10 +120,12 @@ export async function releaseWorktree(o: {
   worktree: string;
   branch: string;
   base: string;
+  /** For a private repo: checking what was pushed talks to the remote. */
+  token: string | null;
 }): Promise<{ removed: true } | { removed: false; reason: "uncommitted" | "unpushed" }> {
   if (!(await exists(o.worktree))) return { removed: true };
   if (await dirty(o.worktree)) return { removed: false, reason: "uncommitted" };
-  if ((await unpushed(o.worktree, o.branch, o.base)) > 0) return { removed: false, reason: "unpushed" };
+  if ((await unpushed(o.worktree, o.branch, o.base, o.token)) > 0) return { removed: false, reason: "unpushed" };
   await git(o.dir, ["worktree", "remove", o.worktree]);
 
   return { removed: true };
