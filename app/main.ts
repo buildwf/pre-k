@@ -1,6 +1,6 @@
 import { defineMain } from "point/app";
 import { z } from "zod";
-import { createRelay } from "./threads/relay";
+import { createOutbox, createRelay } from "./threads/relay";
 
 const pointThreads = z.array(
   z.object({
@@ -16,6 +16,7 @@ export default defineMain({
   // opens a PR, queue one line into that project's coordinator, recorded as from the thread, never steering it.
   ready({ rpc, collections, stores }) {
     const relay = createRelay();
+    const outbox = createOutbox();
     let status = new Map<string, z.infer<typeof pointThreads>[number]["status"]>();
     let seeded = false;
 
@@ -32,9 +33,10 @@ export default defineMain({
       seeded = true;
       for (const n of notes) {
         const coordinator = stores.get("coordinators").threads[n.projectId];
-        if (!coordinator) continue;
-        await rpc.call("agents.send", { threadId: coordinator, text: n.text, turn: "queue", by: `thread:${n.threadId}` });
+        if (coordinator) outbox.hold({ coordinator, threadId: n.threadId, text: n.text });
       }
+      for (const n of outbox.take(status))
+        await rpc.call("agents.send", { threadId: n.coordinator, text: n.text, turn: "queue", by: `thread:${n.threadId}` });
     };
 
     collections.subscribe("thread-outputs", () => void tick());

@@ -62,3 +62,32 @@ export function createRelay() {
     return notes;
   };
 }
+
+/** A note waiting for its coordinator. */
+export interface HeldNote {
+  coordinator: string;
+  threadId: string;
+  text: string;
+}
+
+/**
+ * Notes wait while their coordinator is mid-turn, so a thread update lands after the coordinator's own reply rather
+ * than racing it (project chat showed the two in either order). A coordinator Point doesn't list gets its notes now.
+ */
+export function createOutbox() {
+  const held: HeldNote[] = [];
+  return {
+    hold(note: HeldNote) {
+      held.push(note);
+    },
+    take(status: ReadonlyMap<string, ThreadStatus>): HeldNote[] {
+      const busy = (id: string) => {
+        const s = status.get(id);
+        return s === "starting" || s === "running" || s === "parked" || s === "paused";
+      };
+      const ready = held.filter((n) => !busy(n.coordinator));
+      held.splice(0, held.length, ...held.filter((n) => busy(n.coordinator)));
+      return ready;
+    },
+  };
+}

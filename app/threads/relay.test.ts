@@ -1,6 +1,6 @@
 import type { ThreadStatus } from "point/agent";
 import { describe, expect, it } from "vitest";
-import { createRelay, type RelayThread } from "./relay";
+import { createOutbox, createRelay, type RelayThread } from "./relay";
 
 const t = (over: Partial<RelayThread> = {}): RelayThread => ({
   threadId: "t1",
@@ -49,5 +49,23 @@ describe("relay", () => {
     expect(relay([t({ prs: [{ kind: "pr" as const, repo: "o/r", number: 1 }] })], s("idle"), { seed: true })).toEqual([]);
     expect(relay([t({ prs: [{ kind: "pr" as const, repo: "o/r", number: 1 }] })], s("idle"))).toEqual([]);
     expect(relay([t({ prs: [{ kind: "pr" as const, repo: "o/r", number: 1 }, { kind: "pr" as const, repo: "o/r", number: 2 }] })], s("idle"))).toHaveLength(1);
+  });
+});
+
+describe("outbox", () => {
+  const note = { coordinator: "c1", threadId: "t1", text: "Thread update: done" };
+
+  it("holds a note while the coordinator is mid-turn and sends it once it's idle", () => {
+    const outbox = createOutbox();
+    outbox.hold(note);
+    expect(outbox.take(new Map([["c1", "running"]]))).toEqual([]);
+    expect(outbox.take(new Map([["c1", "idle"]]))).toEqual([note]);
+    expect(outbox.take(new Map([["c1", "idle"]]))).toEqual([]);
+  });
+
+  it("sends at once to a coordinator Point doesn't list", () => {
+    const outbox = createOutbox();
+    outbox.hold(note);
+    expect(outbox.take(new Map())).toEqual([note]);
   });
 });
