@@ -37,6 +37,7 @@ beforeEach(() => {
       `if [ "$1 $2" = "coordinator name" ]; then c=$(grep -c '^coordinator name' ${JSON.stringify(cliLog)}); ` +
       `[ "$c" -le "\${PREK_FAKE_NAME_CRASHES:-0}" ] && exit 139; echo Zack; exit 0; fi\n` +
       `[ -n "$PREK_FAKE_CLI_SLEEP" ] && sleep "$PREK_FAKE_CLI_SLEEP"\n` +
+      `[ -n "$PREK_FAKE_CLI_CRASH" ] && [ ! -e "$PREK_FAKE_CLI_CRASH" ] && { touch "$PREK_FAKE_CLI_CRASH"; exit 139; }\n` +
       `[ "$PREK_FAKE_CLI_FAIL" = 1 ] && { echo 'push rejected' >&2; exit 1; }\n` +
       `echo 'Electron noise on stderr' >&2\n` +
       `echo '{"sha":"abc1234","url":"https://github.com/test/repo/commit/abc1234"}'\n`,
@@ -48,6 +49,7 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.POINT_CLI;
   delete process.env.PREK_FAKE_CLI_FAIL;
+  delete process.env.PREK_FAKE_CLI_CRASH;
   delete process.env.PREK_FAKE_CLI_SLEEP;
   delete process.env.PREK_FAKE_NAME_CRASHES;
   fs.rmSync(dir, { recursive: true, force: true });
@@ -141,6 +143,19 @@ test("the builder commits one change on the thread's branch and lands it on main
     outputTokens: 0,
     costUsd: 0,
   });
+  s.close();
+});
+
+test("a CLI crash (139, nothing printed) lands again once", async () => {
+  process.env.PREK_FAKE_CLI_CRASH = path.join(dir, "crashed");
+  const o = start();
+  const s = await builderHarness.start(o);
+  await s.send("Fix the typo", "start");
+  const events = await turnEnd(o);
+
+  expect(status(events)).toBe("completed");
+  expect(fs.readFileSync(cliLog, "utf8").trim().split("\n")).toHaveLength(2);
+  expect(texts(events).at(-1)).toBe("Landed on main: https://github.com/test/repo/commit/abc1234");
   s.close();
 });
 

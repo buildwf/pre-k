@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { rpc, useCollection, useConnectors } from "point/client";
+import { rpc, useAgentModels, useCollection, useConnectors, useRpc } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { linkFailure, repoFromInput } from "../projects/messages";
+import { builderHarness, builderHarnesses, type BuilderHarness } from "../schemas/harness";
 import type { Project, ProjectChange } from "../schemas/project";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
@@ -223,6 +224,14 @@ function ProjectSettings({ project }: { project: Project }) {
           }}
         />
       </Field>
+      <Field label="Coding agent" hint="New threads in this project run it. Threads already running keep theirs.">
+        <Select
+          value={project.harness ?? "claude-code"}
+          options={builderHarness.options.map((h) => ({ value: h, label: builderHarnesses[h].label }))}
+          onChange={(harness) => void save({ harness })}
+        />
+      </Field>
+      <SignInState harness={project.harness ?? "claude-code"} />
       <Text tone="muted" role="status">
         {status}
       </Text>
@@ -304,6 +313,47 @@ function RepositoryField({
         <GitHubStatus />
       </Stack>
     </form>
+  );
+}
+
+
+// Whether the picked agent can run here. Claude Code's saved /login isn't enough: a thread's sandbox can't read the
+// keychain, so it needs a setup-token or a key (main says which, never the value).
+function SignInState({ harness }: { harness: BuilderHarness }) {
+  const models = useAgentModels(harness);
+  const claude = useRpc(rpc.harnesses.claudeCredentials);
+  const { signIn, cli } = builderHarnesses[harness];
+  const credential = claude.data?.credential;
+  const text =
+    models.state === "loading"
+      ? "Checking sign-in…"
+      : models.state === "unauthenticated"
+        ? `Not signed in. ${signIn}`
+        : models.state === "empty"
+          ? "Signed in, but this account has no models it can run."
+          : models.state === "failed" && models.message?.includes("does not report its models")
+            ? `pre-k can't check this agent's sign-in. If its threads fail to start: ${signIn}`
+            : models.state === "failed"
+              ? `Couldn't check sign-in (${models.message ?? "unknown error"}). Is \`${cli}\` installed and on PATH?`
+              : harness !== "claude-code"
+                ? "Signed in."
+                : credential === "api-key"
+                  ? "Ready: threads use your Anthropic API key, metered by pre-k."
+                  : credential === "oauth-token"
+                    ? "Ready: threads use your Claude subscription (setup-token)."
+                    : `Signed in, but threads can't use the saved login. ${signIn}`;
+
+  return (
+    <Stack direction="row" gap={8} align="center" wrap>
+      <Text tone="muted" role="status">
+        {text}
+      </Text>
+      {models.state !== "loading" && models.state !== "ready" && (
+        <Button variant="quiet" onClick={() => void models.refresh()}>
+          Check again
+        </Button>
+      )}
+    </Stack>
   );
 }
 

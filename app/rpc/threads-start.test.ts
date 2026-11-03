@@ -6,6 +6,7 @@ import { z } from "zod";
 import { afterEach, describe, expect, it } from "vitest";
 import threads from "../collections/threads.collection";
 import outputs from "../collections/thread-outputs.collection";
+import projects from "../collections/projects.collection";
 import router, { THREAD_AGENT } from "./threads";
 
 type Answer = { ok: true; value: unknown } | { ok: false; failure: { code: string; detail: unknown } };
@@ -35,7 +36,7 @@ function fakeMain(answers: Record<string, Answer> = {}) {
 const input = { projectId: "p1", title: "Add a README badge", request: "Add a CI badge to the README", requestedBy: "Zack" };
 const open: { close: () => void }[] = [];
 const client = (caller: string, main: ReturnType<typeof fakeMain>) => {
-  const c = testClient(router, { caller, collections: { threads, "thread-outputs": outputs }, rpc: { call: main.call } });
+  const c = testClient(router, { caller, collections: { threads, "thread-outputs": outputs, projects }, rpc: { call: main.call } });
   open.push(c);
   return c;
 };
@@ -61,6 +62,14 @@ describe("threads.start", () => {
       { path: "agents.send", input: { threadId: "t1", text: input.request, turn: "queue", by: "Zack" } },
     ]);
     expect(collections.get("threads", "t1")).toMatchObject({ projectId: "p1", requestedBy: "Zack", ...workspace });
+  });
+
+  it("starts the harness the project picked", async () => {
+    const main = fakeMain();
+    const c = client("window:main", main);
+    await c.collections.upsert("projects", [{ id: "p1", name: "P", instructions: "", createdAt: 1, lastOpenedAt: 1, harness: "codex" }]);
+    expect((await c.rpc.start(input)).ok).toBe(true);
+    expect(main.calls.find((c) => c.path === "agents.start")?.input).toMatchObject({ agent: "builder-codex", cwd: "/w/1" });
   });
 
   it("uses the coordinator's own project when it passes none", async () => {

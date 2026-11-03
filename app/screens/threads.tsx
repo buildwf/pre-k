@@ -8,6 +8,7 @@ import { ThreadPullRequest } from "../lib/ThreadPullRequest";
 import { lastAttempt, threadState, type ThreadState } from "../threads/state";
 import { Alert } from "../ui/Alert";
 import { ApprovalPrompt } from "../ui/ApprovalPrompt";
+import { formatCost, threadCost } from "../lib/cost";
 import { Button } from "../ui/Button";
 import { Disclosure } from "../ui/Disclosure";
 import { EmptyState } from "../ui/EmptyState";
@@ -225,7 +226,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
           <Text tone="muted">{state.help}</Text>
         </Stack>
         <Text tone="muted">
-          ${agent.usage.costUsd.toFixed(3)}
+          {formatCost(threadCost(agent.events))}
           {row?.requestedBy ? ` · asked by ${row.requestedBy}` : ""}
           {row?.branch ? ` · ${row.branch}` : ""}
         </Text>

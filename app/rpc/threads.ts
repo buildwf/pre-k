@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { builderAgentFor } from "../schemas/harness";
 import { preparedWorkspace as prepared } from "../schemas/workspace";
 import { recordAttempt } from "../threads/attempts";
 import { callerThread, outputKey, threadState } from "../threads/state";
@@ -10,8 +11,8 @@ import { callerThread, outputKey, threadState } from "../threads/state";
 const status = z.enum(["starting", "running", "parked", "paused", "idle", "stopped", "interrupted"]);
 const pointThreads = z.array(z.object({ id: z.string(), status }));
 
-// The agent new threads run: the builder from #19 (Claude Code; `builder-codex` and `builder-opencode` pick another harness).
-export const THREAD_AGENT = "builder";
+// The agent new threads run when the project hasn't picked a harness: the Claude Code builder from #19.
+export const THREAD_AGENT = builderAgentFor(undefined);
 
 const failure = z.object({ code: z.string(), detail: z.unknown() });
 const receipt = z.enum(["delivered", "queued", "rejected"]);
@@ -118,7 +119,7 @@ export default defineRouter({
       const context = await rpc.call("projects.context", { projectId }).catch(() => undefined);
       const text = context?.ok ? z.string().min(1).safeParse(context.value) : undefined;
       const started = await rpc.call("agents.start", {
-        agent: THREAD_AGENT,
+        agent: builderAgentFor(collections.get("projects", projectId)?.harness),
         cwd: workspace?.worktree ?? scratch,
         by: input.requestedBy,
         ...(text?.success ? { context: text.data } : {}),
