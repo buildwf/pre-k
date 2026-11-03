@@ -127,6 +127,10 @@ if [ ! -d ../sevenyears/.git ]; then
   note "cloning sevenyears into ../sevenyears"
   run "check the network and that you can read github.com/buildwf/sevenyears" \
     git clone -q https://github.com/buildwf/sevenyears.git ../sevenyears
+elif ! git -C ../sevenyears merge-base --is-ancestor bdcb5f0 HEAD 2>/dev/null; then
+  # app/ui imports sevenyears' exported subpaths, which start at bdcb5f0.
+  note "updating ../sevenyears (pre-k needs its exports, from bdcb5f0)"
+  run "could not update ../sevenyears: pull its main by hand" git -C ../sevenyears pull -q --ff-only origin main
 fi
 run "bun install failed: see the log (it needs the network)" bun install
 run "Electron's download failed: check the network and run sh scripts/start.sh again" bunx install-electron
