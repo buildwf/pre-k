@@ -132,6 +132,27 @@ export async function releaseWorktree(o: {
   return { removed: true };
 }
 
+type Author = { name: string; email: string };
+
+/** Commit whatever the agent left uncommitted, as `author`. */
+async function commitLeftovers(worktree: string, message: string, author: Author) {
+  if (!(await dirty(worktree))) return;
+  await git(worktree, ["add", "--all"]);
+  await git(worktree, [
+    "-c",
+    `user.name=${author.name}`,
+    "-c",
+    `user.email=${author.email}`,
+    "commit",
+    "--quiet",
+    "-m",
+    message,
+  ]);
+}
+
+const ahead = async (worktree: string, base: string) =>
+  Number(await git(worktree, ["rev-list", "--count", `origin/${base}..HEAD`]));
+
 export type PublishResult =
   | { ok: true; branch: string; head: string }
   | { ok: false; reason: "no-changes" | "rejected"; detail: string };
@@ -153,23 +174,9 @@ export async function publishBranch(o: {
   if (current !== o.branch)
     return { ok: false, reason: "rejected", detail: `the worktree is on ${current}, not ${o.branch}` };
 
-  if (await dirty(o.worktree)) {
-    await git(o.worktree, ["add", "--all"]);
-    await git(o.worktree, [
-      "-c",
-      `user.name=${o.author.name}`,
-      "-c",
-      `user.email=${o.author.email}`,
-      "commit",
-      "--quiet",
-      "-m",
-      o.message,
-    ]);
-  }
+  await commitLeftovers(o.worktree, o.message, o.author);
 
-  const ahead = Number(await git(o.worktree, ["rev-list", "--count", `origin/${o.base}..HEAD`]));
-
-  if (ahead === 0)
+  if ((await ahead(o.worktree, o.base)) === 0)
     return { ok: false, reason: "no-changes", detail: `${o.branch} has no commits beyond ${o.base}` };
 
   try {
@@ -180,4 +187,63 @@ export async function publishBranch(o: {
   }
 
   return { ok: true, branch: o.branch, head: await git(o.worktree, ["rev-parse", "HEAD"]) };
+}
+
+export type LandResult =
+  | { ok: true; sha: string }
+  | { ok: false; reason: "no-changes" | "conflict" | "not-fast-forward" | "rejected"; detail: string };
+
+/**
+ * Land a thread's work straight on `base` (no PR): commit anything uncommitted as `message`, fetch, rebase the
+ * thread's branch onto `origin/<base>`, and push HEAD to `base`. Never forced: when someone pushed in between, the push
+ * is refused (`not-fast-forward`) and calling again rebases onto the new tip. A rebase conflict is aborted, leaving the
+ * worktree as it was, and reported.
+ */
+export async function landOnBase(o: {
+  worktree: string;
+  branch: string;
+  base: string;
+  message: string;
+  author: Author;
+  token: string | null;
+}): Promise<LandResult> {
+  const current = await git(o.worktree, ["rev-parse", "--abbrev-ref", "HEAD"]);
+
+  if (current !== o.branch)
+    return { ok: false, reason: "rejected", detail: `the worktree is on ${current}, not ${o.branch}` };
+
+  await commitLeftovers(o.worktree, o.message, o.author);
+  await git(o.worktree, ["fetch", "--quiet", "origin", o.base], o.token);
+
+  try {
+    await git(o.worktree, [
+      "-c",
+      `user.name=${o.author.name}`,
+      "-c",
+      `user.email=${o.author.email}`,
+      "rebase",
+      "--quiet",
+      `origin/${o.base}`,
+    ]);
+  } catch (e) {
+    if (!(e instanceof GitError)) throw e;
+    await git(o.worktree, ["rebase", "--abort"]).catch(() => undefined);
+
+    return { ok: false, reason: "conflict", detail: e.message };
+  }
+
+  if ((await ahead(o.worktree, o.base)) === 0)
+    return { ok: false, reason: "no-changes", detail: `${o.branch} has nothing that ${o.base} doesn't` };
+
+  try {
+    await git(o.worktree, ["push", "--quiet", "origin", `HEAD:refs/heads/${o.base}`], o.token);
+  } catch (e) {
+    if (!(e instanceof GitError)) throw e;
+
+    return /non-fast-forward|fetch first|rejected/.test(e.stderr)
+      ? { ok: false, reason: "not-fast-forward", detail: e.message }
+      : { ok: false, reason: "rejected", detail: e.message };
+  }
+
+  return { ok: true, sha: await git(o.worktree, ["rev-parse", "HEAD"]) };
 }
