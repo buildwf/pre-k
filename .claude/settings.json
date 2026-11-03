@@ -1,0 +1,25 @@
+{
+  "env": { "MCP_TOOL_TIMEOUT": "600000" },
+  "enabledMcpjsonServers": ["point"],
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          { "type": "command", "command": "sh \"$CLAUDE_PROJECT_DIR/scripts/agent-check.sh\"" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$CLAUDE_PROJECT_DIR/scripts/agent-check.sh\" --stop",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
