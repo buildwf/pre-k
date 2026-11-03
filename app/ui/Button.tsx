@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { Button as SevenButton } from "sevenyears/src/components/Button";
+import { Button as SevenButton } from "sevenyears/components/Button";
 
 const variants = { default: "outline", primary: "default", danger: "destructive", quiet: "ghost" } as const;
 const sizes = { default: "default", sm: "sm", icon: "icon" } as const;

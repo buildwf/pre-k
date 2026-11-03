@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { colors, radius } from "sevenyears/src/tokens.stylex";
+import { colors, radius } from "sevenyears/tokens.stylex";
 
 const pulse = stylex.keyframes({ "0%, 100%": { opacity: 1 }, "50%": { opacity: 0.35 } });
 

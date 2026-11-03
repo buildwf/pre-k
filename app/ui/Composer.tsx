@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { Button as SevenButton } from "sevenyears/src/components/Button";
-import { colors, font, motion, radius, shadow, space, text } from "sevenyears/src/tokens.stylex";
+import { Button as SevenButton } from "sevenyears/components/Button";
+import { colors, font, motion, radius, shadow, space, text } from "sevenyears/tokens.stylex";
 import { Icon } from "./Icon";
 
 const s = stylex.create({

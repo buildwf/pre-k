@@ -19,7 +19,8 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": { "sevenyears/tokens.stylex": ["./node_modules/sevenyears/src/tokens.stylex.ts"] }
   },
   "include": ["app", "cloud", "point.config.ts", ".point/types.d.ts"]
 }
