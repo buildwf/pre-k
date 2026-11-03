@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "point": { "command": "pnpm", "args": ["-s", "exec", "point", "mcp"] }
+  }
+}

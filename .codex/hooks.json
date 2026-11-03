@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^(apply_patch|Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"$PWD\"; until [ -f \"$d/point.config.ts\" ] || [ \"$d\" = / ]; do d=$(dirname \"$d\"); done; sh \"$d/scripts/agent-check.sh\"",
+            "statusMessage": "point check",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"$PWD\"; until [ -f \"$d/point.config.ts\" ] || [ \"$d\" = / ]; do d=$(dirname \"$d\"); done; sh \"$d/scripts/agent-check.sh\" --stop",
+            "statusMessage": "point check with types",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
