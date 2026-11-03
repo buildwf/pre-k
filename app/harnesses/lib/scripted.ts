@@ -13,10 +13,10 @@ export const commands = {
   landOnMain: (message: string) => `"$POINT_CLI" github landOnMain --message ${sh(message)} --json`,
   /**
    * #6/#13: the coordinator starts a thread for a request. The project comes from the caller (#25); `requestedBy` is
-   * required by #6. A harness isn't told who sent a message, so the scripted coordinator names a fixed person.
+   * required by #6. A harness isn't told who sent a message, so it asks pre-k (`coordinator name`, #25's follow-up).
    */
-  startThread: (title: string, request: string, requestedBy = "Person") =>
-    `"$POINT_CLI" threads start --title ${sh(title)} --request ${sh(request)} --requestedBy ${sh(requestedBy)} --json`,
+  startThread: (title: string, request: string) =>
+    `"$POINT_CLI" threads start --title ${sh(title)} --request ${sh(request)} --requestedBy "$("$POINT_CLI" coordinator name)" --json`,
 };
 
 /** Quote one shell argument. */
