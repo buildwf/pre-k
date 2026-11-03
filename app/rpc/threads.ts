@@ -1,4 +1,7 @@
 import { defineRouter, procedure } from "point/app";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { z } from "zod";
 import { preparedWorkspace as prepared } from "../schemas/workspace";
 import { callerThread, outputKey, threadState } from "../threads/state";
@@ -92,17 +95,20 @@ export default defineRouter({
       const ws = await rpc.call("workspaces.prepare", { projectId, title: input.title });
       let workspace: z.infer<typeof prepared> | undefined;
       if (ws.ok) workspace = prepared.parse(ws.value);
-      else if (ws.failure.code !== "NO_REPO" && ws.failure.code !== "NOT_FOUND")
-        // A project with no repo still gets a thread (no worktree), and so does an app without the workspaces router
-        // yet (NOT_FOUND, until #12 lands). Anything else stops here.
+      else if (ws.failure.code !== "NO_REPO")
+        // A project with no repo still gets a thread; anything else stops here.
         return fail("WORKSPACE_FAILED", { code: ws.failure.code, message: messageOf(ws.failure) });
 
+      // Never let the agent fall back to the daemon's working directory (the app's own checkout): a thread with no
+      // repo works in an empty scratch folder of its own.
+      const scratch = workspace ? undefined : await fs.mkdtemp(path.join(os.tmpdir(), "pre-k-thread-"));
       const release = async () => {
         if (workspace) await rpc.call("workspaces.release", { worktree: workspace.worktree }).catch(() => undefined);
+        if (scratch) await fs.rm(scratch, { recursive: true, force: true }).catch(() => undefined);
       };
       const started = await rpc.call("agents.start", {
         agent: THREAD_AGENT,
-        ...(workspace ? { cwd: workspace.worktree } : {}),
+        cwd: workspace?.worktree ?? scratch,
       });
       const threadId = started.ok ? z.string().safeParse(started.value) : undefined;
       if (!started.ok || !threadId?.success) {
