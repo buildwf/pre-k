@@ -18,7 +18,8 @@
     "storybook": "storybook dev -p 6006 --exact-port --no-open",
     "build-storybook": "storybook build",
     "smoke:delivery": "sh scripts/smoke-delivery.sh",
-    "tour": "sh scripts/tour.sh"
+    "tour": "sh scripts/tour.sh",
+    "package": "sh scripts/package.sh"
   },
   "dependencies": {
     "point": "link:../cloudflare-point",
