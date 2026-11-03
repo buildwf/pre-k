@@ -9,7 +9,8 @@ import { defineSandbox } from "point/app";
 export default defineSandbox({
   provider: "local",
   read: "workspace",
-  // Toolchains under home: bun (pre-k and most repos it works on), nvm, pnpm (Point and pnpm repos), vite-plus.
-  readAllow: ["/opt/homebrew", "~/.bun", "~/.nvm", "~/.local/share/pnpm", "~/Library/pnpm", "~/.local/share/vite-plus"],
+  // Toolchains under home: bun (pre-k and most repos it works on), nvm, pnpm (Point and pnpm repos), vite-plus. And
+  // the person's git config, read-only, so `git commit` works and keeps their name; git can't push from here anyway.
+  readAllow: ["~/.gitconfig", "~/.config/git", "/opt/homebrew", "~/.bun", "~/.nvm", "~/.local/share/pnpm", "~/Library/pnpm", "~/.local/share/vite-plus"],
   network: { allow: ["*.anthropic.com", "*.openai.com", "*.chatgpt.com", "registry.npmjs.org"] },
 });
