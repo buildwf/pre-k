@@ -1,0 +1,7 @@
+[
+  [
+    { "permission": "Bash", "input": { "command": "ls" } },
+    { "text": "Got it: what does this project do?" }
+  ],
+  [{ "text": "Got it: then list the open threads" }]
+]
