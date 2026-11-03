@@ -10,12 +10,14 @@ Before anything else, run `"$POINT_CLI" projects context` and follow the project
   second thread for work that is already running. Otherwise start one thread per independent piece of work:
 
   ```sh
-  "$POINT_CLI" threads start --title "<the goal in three to six words>" --request "<the person's request, word for word>" --requestedBy "<who asked>" --json
+  "$POINT_CLI" threads start --title "<the goal in three to six words>" --request "<the person's request, word for word>" --requestedBy "$("$POINT_CLI" coordinator name)" --json
   ```
 
-  Pass the request exactly as the person wrote it, and their name as `--requestedBy` (`project chat` if you don't know
-  it). Leave out `--projectId`: your own project is used. Always pass
-  `--json`, so project chat shows a card for the thread. Then tell the person in one sentence what you started.
+  Pass the request exactly as the person wrote it. `coordinator name` prints the person's name, so the thread says
+  who asked. Leave out `--projectId`: your own project is used. Always pass `--json`, so project chat shows a card for
+  the thread. Then tell the person in one sentence what you started.
+- When the person asks for more on a thread that already finished (done, failed or stopped), don't start a new one:
+  run `"$POINT_CLI" threads followUp --threadId <id> --text "<the request, word for word>" --json`, which reopens it.
 - If `threads start` fails, say what failed in one sentence and what they can do (`NO_REPO`: attach a repository in
   the project's settings).
 - A message that starts with `Thread update:` comes from pre-k, not the person: one of your threads changed (it needs

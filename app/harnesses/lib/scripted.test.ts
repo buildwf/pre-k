@@ -33,6 +33,7 @@ beforeEach(() => {
     cli,
     // One log line per call: newlines inside an argument (the PR body) become "|".
     `#!/bin/sh\n{ printf '%s' "$*" | tr '\\n' '|'; echo; } >> ${JSON.stringify(cliLog)}\n` +
+      `[ "$1 $2" = "coordinator name" ] && { echo Zack; exit 0; }\n` +
       `[ -n "$PREK_FAKE_CLI_SLEEP" ] && sleep "$PREK_FAKE_CLI_SLEEP"\n` +
       `[ "$PREK_FAKE_CLI_FAIL" = 1 ] && { echo 'push rejected' >&2; exit 1; }\n` +
       `echo 'Electron noise on stderr' >&2\n` +
@@ -226,7 +227,8 @@ test("the coordinator starts a thread for a request and answers a question in te
   const events = await turnEnd(o, 2);
 
   expect(fs.readFileSync(cliLog, "utf8").trim().split("\n")).toEqual([
-    "threads start --title Add a README badge --request Add a README badge --requestedBy Person --json",
+    "coordinator name",
+    "threads start --title Add a README badge --request Add a README badge --requestedBy Zack --json",
   ]);
   expect(texts(events)).toContain("Started a thread for “Add a README badge”.");
   expect(texts(events).at(-1)).toMatch(/^I'm the scripted coordinator/);

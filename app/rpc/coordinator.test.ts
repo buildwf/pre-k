@@ -18,6 +18,7 @@ const call: MainCalls["call"] = async (p, input) => {
   calls.push({ path: p, input });
   if (p === "agents.threads") return { ok: true, value: threads };
   if (p === "agents.start") return startResult;
+  if (p === "projects.context") return { ok: true, value: "Use bun." };
   return { ok: false, failure: { code: "NOT_FOUND", detail: { path: p } } };
 };
 
@@ -36,6 +37,7 @@ describe("coordinator.ensure", () => {
     expect(await rpc.ensure({ projectId: "p1" })).toEqual({ ok: true, value: { threadId: "t1" } });
     expect(calls.find((c) => c.path === "agents.start")?.input).toMatchObject({
       agent: "coordinator",
+      context: "Use bun.",
       cwd: path.join(home, ".pre-k", "projects", "p1", "coordinator"),
     });
     expect((await fs.stat(path.join(home, ".pre-k", "projects", "p1", "coordinator"))).isDirectory()).toBe(true);
@@ -118,6 +120,34 @@ describe("coordinator.ensure", () => {
     expect(await c.rpc.projectOf({ threadId: "t2" })).toEqual({ ok: true, value: "p2" });
     const miss = await c.rpc.projectOf({ threadId: "builder-1" });
     expect(miss.ok ? null : miss.failure.code).toBe("NOT_A_COORDINATOR");
+    c.close();
+  });
+
+  it("names the person from settings, then GitHub, then the computer account", async () => {
+    const answer = (gh: Answer): MainCalls["call"] => async () => gh;
+    const settings = (name?: string) => ({ repo: "/tmp", theme: "system" as const, ...(name ? { name } : {}) });
+
+    const a = testClient(coordinator, {
+      rpc: { call: answer({ ok: true, value: { login: "nvsd", name: "Zack" } }) },
+      stores: { settings: settings("Z") },
+    });
+    expect(await a.rpc.whoami()).toEqual({ ok: true, value: { name: "Z", from: "settings" } });
+    expect(await a.rpc.name()).toEqual({ ok: true, value: "Z" });
+    a.close();
+
+    const b = testClient(coordinator, {
+      rpc: { call: answer({ ok: true, value: { login: "nvsd", name: null } }) },
+      stores: { settings: settings() },
+    });
+    expect(await b.rpc.whoami()).toEqual({ ok: true, value: { name: "nvsd", from: "github" } });
+    b.close();
+
+    const c = testClient(coordinator, {
+      rpc: { call: answer({ ok: false, failure: { code: "CONNECTOR_NOT_CONNECTED", detail: {} } }) },
+      stores: { settings: settings() },
+    });
+    const r = await c.rpc.whoami();
+    expect(r.ok && r.value.from).toBe("computer");
     c.close();
   });
 });

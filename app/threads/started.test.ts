@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { startedThread } from "./started";
+import { startedThread, threadStart } from "./started";
 
 const cmd = { command: `exec "$POINT_CLI" threads start --title 'Add badge' --request 'Add a badge' --requestedBy Zack --json` };
 
@@ -18,5 +18,16 @@ describe("startedThread", () => {
     expect(startedThread(cmd, '{"code":"NO_PROJECT"}')).toBeUndefined();
     expect(startedThread(cmd, undefined)).toBeUndefined();
     expect(startedThread({ file_path: "x" }, '{"threadId":"t1"}')).toBeUndefined();
+  });
+
+  it("says why a start failed, without Electron's log noise", () => {
+    expect(
+      threadStart(
+        cmd,
+        "[10450:1103/194030.479976:ERROR:dbus/bus.cc:406] Failed to connect to the bus\nNO_REPO: attach a repository",
+      ),
+    ).toEqual({ failed: "NO_REPO: attach a repository" });
+    expect(threadStart(cmd, "[1:1103/1.2:ERROR:dbus/bus.cc:406] x")).toEqual({ failed: "the command printed nothing" });
+    expect(threadStart(cmd, '{"code":"NO_PROJECT"}')).toEqual({ failed: '{"code":"NO_PROJECT"}' });
   });
 });
