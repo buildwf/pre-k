@@ -9,7 +9,7 @@
 #    A fresh clone starts at point.lock's commit. An existing Point checkout on main with no local changes is pulled when it's older than point.lock's commit;
 #    one on another branch or with changes is left alone, with a warning if it's too old.
 # 3. Builds Point when its build is older than its checkout.
-# 4. Clones sevenyears (the design system) next to this repo if missing, installs pre-k (bun) and Electron.
+# 4. Checks out the pinned sevenyears (the design system, vendor/sevenyears submodule), installs pre-k (bun) and Electron.
 # 5. Opens the app (bun run dev). Quit with Ctrl-C.
 #
 # Command output goes to .point/start.log; a failing step prints its end and the fix.
@@ -62,7 +62,9 @@ if [ -z "$PREK_START_UPDATED" ] && [ -d .git ]; then
   b=$(branch .)
   if [ "$b" = main ] && clean .; then
     before=$(git rev-parse HEAD)
-    run "check the network, or run git pull yourself to see why" git pull --ff-only -q origin main
+    printf '\n$ git pull --ff-only -q origin main\n' >>"$log"
+    git pull --ff-only -q origin main >>"$log" 2>&1 ||
+      warn "couldn't fast-forward main (offline, or local commits GitHub doesn't have), so running what's here"
     if [ "$(git rev-parse HEAD)" != "$before" ]; then
       note "pulled main: $(git rev-parse --short "$before") → $(short .)"
       PREK_START_UPDATED=1 exec sh scripts/start.sh "$@" # the new version of this script carries on
@@ -122,11 +124,19 @@ else
 fi
 
 step 4 "Installing pre-k"
-# sevenyears is pre-k's design system (docs/design.md): a private repo next to this one, installed as a file: copy.
-if [ ! -d ../sevenyears/.git ]; then
-  note "cloning sevenyears into ../sevenyears"
-  run "check the network and that you can read github.com/buildwf/sevenyears" \
-    git clone -q https://github.com/buildwf/sevenyears.git ../sevenyears
+# sevenyears is pre-k's design system (docs/design.md), a private repo pinned as the vendor/sevenyears submodule: the
+# commit is pre-k's, so a sevenyears change reaches pre-k only when someone bumps it (cd vendor/sevenyears, check out
+# the new commit, commit the submodule). Never touches a sevenyears checkout elsewhere.
+want=$(git ls-tree HEAD vendor/sevenyears | awk '{print $3}')
+have=$(git -C vendor/sevenyears rev-parse HEAD 2>/dev/null || true)
+if [ "$have" != "$want" ]; then
+  if [ -n "$have" ] && ! clean vendor/sevenyears; then
+    warn "vendor/sevenyears has local changes, so it stays at $(short vendor/sevenyears) (pre-k pins $(echo "$want" | cut -c1-7))"
+  else
+    note "checking out sevenyears $(echo "$want" | cut -c1-7)"
+    run "check the network and that you can read github.com/buildwf/sevenyears (it's private)" \
+      git submodule update --init vendor/sevenyears
+  fi
 fi
 run "bun install failed: see the log (it needs the network)" bun install
 run "Electron's download failed: check the network and run sh scripts/start.sh again" bunx install-electron

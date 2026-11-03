@@ -1,0 +1,3 @@
+[submodule "vendor/sevenyears"]
+	path = vendor/sevenyears
+	url = https://github.com/buildwf/sevenyears.git
