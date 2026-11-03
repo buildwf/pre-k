@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
-import { rpc, useAgent } from "point/client";
+import { rpc, useAgent, useCollection, useThreads } from "point/client";
+import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../../.point/components";
+import { ThreadPullRequest } from "../../lib/ThreadPullRequest";
+import { startedThread } from "../../threads/started";
+import { threadState } from "../../threads/state";
 import { ApprovalPrompt } from "../../ui/ApprovalPrompt";
 import { Button } from "../../ui/Button";
+import { Card } from "../../ui/Card";
 import { EmptyState } from "../../ui/EmptyState";
 import { Field } from "../../ui/Field";
 import { Heading } from "../../ui/Heading";
@@ -14,7 +19,13 @@ import { TextField } from "../../ui/TextField";
 
 // Project chat: the conversation with the project's coordinator. Messages queue by default, so nothing typed while
 // the coordinator is busy interrupts it or gets lost; Steer redirects the running turn instead.
-export function ProjectChat({ projectId }: { projectId: string }) {
+export function ProjectChat({
+  projectId,
+  onOpenThread,
+}: {
+  projectId: string;
+  onOpenThread?: ((threadId: string) => void) | undefined;
+}) {
   const [threadId, setThreadId] = useState<string>();
   const [problem, setProblem] = useState<string>();
 
@@ -34,12 +45,18 @@ export function ProjectChat({ projectId }: { projectId: string }) {
     <Stack gap={12}>
       <Heading>Project chat</Heading>
       {problem && <Text tone="danger">{problem}</Text>}
-      {threadId ? <Conversation threadId={threadId} /> : !problem && <Text tone="muted">Starting…</Text>}
+      {threadId ? <Conversation threadId={threadId} onOpenThread={onOpenThread} /> : !problem && <Text tone="muted">Starting…</Text>}
     </Stack>
   );
 }
 
-function Conversation({ threadId }: { threadId: string }) {
+function Conversation({
+  threadId,
+  onOpenThread,
+}: {
+  threadId: string;
+  onOpenThread?: ((threadId: string) => void) | undefined;
+}) {
   const agent = useAgent(threadId);
   const [text, setText] = useState("");
   const busy = agent.status === "running" || agent.status === "parked" || agent.status === "paused";
@@ -87,7 +104,12 @@ function Conversation({ threadId }: { threadId: string }) {
               </Message>,
             ]
           ) : m.role === "tool" ? (
-            [<Message key={m.id} from="tool" title={m.name ?? "tool"} pending={!m.done} />]
+            [
+              <Message key={m.id} from="tool" title={m.name ?? "tool"} pending={!m.done} />,
+              ...[startedThread(m.input, m.done ? m.output : undefined)].flatMap((id) =>
+                id ? [<StartedThread key={`${m.id}:thread`} threadId={id} onOpen={onOpenThread} />] : [],
+              ),
+            ]
           ) : (
             []
           ),
@@ -132,5 +154,58 @@ function Conversation({ threadId }: { threadId: string }) {
         </Stack>
       </form>
     </Stack>
+  );
+}
+
+const stateWords = {
+  working: "working",
+  blocked: "needs you",
+  review_ready: "ready for review",
+  done: "done",
+  failed: "failed",
+  stopped: "stopped",
+  interrupted: "interrupted",
+  idle: "idle",
+} as const;
+
+// The card for a thread the coordinator started: its title, live state, branch and the PRs it opened.
+function StartedThread({
+  threadId,
+  onOpen,
+}: {
+  threadId: string;
+  onOpen?: ((threadId: string) => void) | undefined;
+}) {
+  const threads = useCollection("threads");
+  const outputs = useCollection("thread-outputs");
+  const live = useThreads();
+  const { data: rows } = useLiveQuery((q) => q.from({ t: threads }).where(({ t }) => eq(t.threadId, threadId)));
+  const { data: prs } = useLiveQuery((q) => q.from({ o: outputs }).where(({ o }) => eq(o.threadId, threadId)));
+  const row = rows[0];
+  if (!row) return null;
+  const state = threadState(live.find((t) => t.id === threadId)?.status, row.endedAs, prs.length);
+
+  return (
+    <Card>
+      <Stack gap={8}>
+        <Stack direction="row" gap={8} align="center">
+          <Text bold>Started a thread: {row.title}</Text>
+          <Text tone="muted">{stateWords[state]}</Text>
+          {onOpen && (
+            <Button variant="quiet" onClick={() => onOpen(threadId)}>
+              Open thread
+            </Button>
+          )}
+        </Stack>
+        {row.branch && (
+          <Text tone="muted" mono>
+            {row.branch}
+          </Text>
+        )}
+        {prs.map((o) => (
+          <ThreadPullRequest key={o.id} repo={o.repo} number={o.number} />
+        ))}
+      </Stack>
+    </Card>
   );
 }

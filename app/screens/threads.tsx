@@ -30,11 +30,22 @@ const stateLabel: Record<ThreadState, { text: string; tone: "default" | "muted" 
 };
 
 /** A project's threads, newest activity first, and the one that is open. */
-export function Threads({ projectId }: { projectId: string }) {
+export function Threads({
+  projectId,
+  open: shown,
+  onOpen,
+}: {
+  projectId: string;
+  /** Controlled from outside, so project chat's thread cards can open a thread here. */
+  open?: string | undefined;
+  onOpen?: ((threadId: string) => void) | undefined;
+}) {
   const threads = useCollection("threads");
   const outputs = useCollection("thread-outputs");
   const live = useThreads();
-  const [open, setOpen] = useState<string>();
+  const [own, setOwn] = useState<string>();
+  const open = onOpen ? shown : own;
+  const setOpen = onOpen ?? setOwn;
   const { data: rows, isLoading } = useLiveQuery(
     (q) =>
       q

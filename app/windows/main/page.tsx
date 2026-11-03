@@ -24,6 +24,7 @@ export default function Page() {
   const [personas, setPersonas] = useStore("personas");
   const [threadId, setThreadId] = useState<string>();
   const [problem, setProblem] = useState<string>();
+  const [openThread, setOpenThread] = useState<string>();
 
   if (!settings || !personas) return null;
 
@@ -54,7 +55,7 @@ export default function Page() {
         <Projects>
           {(project) => (
             <>
-        <ProjectChat projectId={project.id} />
+        <ProjectChat projectId={project.id} onOpenThread={setOpenThread} />
         <Field label="Repository">
           <TextField
             value={settings.repo}
@@ -91,7 +92,7 @@ export default function Page() {
         </Disclosure>
         {problem && <Text tone="danger">{problem}</Text>}
         {/* One local project until Project setup adds project records. */}
-        <Threads projectId={project.id} />
+        <Threads projectId={project.id} open={openThread} onOpen={setOpenThread} />
         {threadId ? (
           <Chat threadId={threadId} />
         ) : (
