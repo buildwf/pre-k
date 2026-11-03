@@ -1,3 +1,4 @@
+import { ConnectorError } from "point/connectors";
 import { fakeConnector } from "point/connectors/testing";
 import { testClient } from "point/rpc/testing";
 import { afterAll, describe, expect, it } from "vitest";
@@ -5,8 +6,12 @@ import githubConnector from "../connectors/github.connector";
 import github from "./github";
 
 describe("github.me", () => {
+  let refused = false;
   const fake = fakeConnector(githubConnector, {
-    me: { login: "octo-pre-k", name: null, url: "https://github.com/octo-pre-k" },
+    me: () => {
+      if (refused) throw new ConnectorError("github", 401, "Bad credentials");
+      return { login: "octo-pre-k", name: null, url: "https://github.com/octo-pre-k" };
+    },
   });
   const { rpc, close } = testClient(github, { connectors: [fake] });
 
@@ -15,11 +20,19 @@ describe("github.me", () => {
   it("says who pre-k acts as, and nothing else", async () => {
     const r = await rpc.me();
 
-    expect(r.ok && r.value).toEqual({
+    expect(r.ok ? r.value : r.failure).toEqual({
       login: "octo-pre-k",
       name: null,
       url: "https://github.com/octo-pre-k",
     });
+  });
+
+  it("fails TOKEN_REJECTED for a revoked token, so the window can ask to connect again", async () => {
+    refused = true;
+    const r = await rpc.me();
+
+    refused = false;
+    expect(r.ok ? null : r.failure.code).toBe("TOKEN_REJECTED");
   });
 });
 
@@ -41,3 +54,4 @@ describe("github.me, not connected", () => {
     }
   });
 });
+
