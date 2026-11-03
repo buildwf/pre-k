@@ -31,13 +31,15 @@ const summary = (over: Record<string, unknown> = {}) => ({
 });
 
 let answer: () => unknown = () => summary();
-const github = fakeConnector("github", { getPullRequestSummary: () => answer() });
+let checks: () => unknown = () => ({ state: "success", checks: [{ name: "verify", state: "success", url: null }] });
+const github = fakeConnector("github", { getPullRequestSummary: () => answer(), getChecks: () => checks() });
 const { rpc, close } = testClient(delivery, { connectors: [github] });
 
 afterAll(close);
 beforeEach(() => {
   github.clear();
   answer = () => summary();
+  checks = () => ({ state: "success", checks: [{ name: "verify", state: "success", url: null }] });
 });
 
 describe("delivery.pullRequest", () => {
@@ -82,5 +84,42 @@ describe("delivery.pullRequest", () => {
       code: "NOT_FOUND",
       detail: { repo: "acme/test-repo", number: 99 },
     });
+  });
+});
+
+describe("delivery.checks", () => {
+  const sha = "a".repeat(40);
+
+  it("reads the rolled-up checks on a landed commit", async () => {
+    const r = await rpc.checks({ repo: "acme/test-repo", ref: sha });
+
+    expect(r.ok && r.value).toEqual({ state: "success", checks: [{ name: "verify", state: "success" }] });
+    expect(github.callsTo("getChecks")).toEqual([{ repo: "acme/test-repo", ref: sha }]);
+  });
+
+  it("names a failing check", async () => {
+    checks = () => ({
+      state: "failure",
+      checks: [
+        { name: "lint", state: "success", url: null },
+        { name: "verify", state: "failure", url: "https://example.com/run/1" },
+      ],
+    });
+    const r = await rpc.checks({ repo: "acme/test-repo", ref: sha });
+
+    expect(r.ok && r.value.checks.find((c) => c.state === "failure")).toEqual({
+      name: "verify",
+      state: "failure",
+      url: "https://example.com/run/1",
+    });
+  });
+
+  it("fails with NOT_FOUND for a commit GitHub doesn't know", async () => {
+    checks = () => {
+      throw new ConnectorError("github", 422, "No commit found for SHA");
+    };
+    const r = await rpc.checks({ repo: "acme/test-repo", ref: sha });
+
+    expect(r.ok ? null : r.failure.code).toBe("NOT_FOUND");
   });
 });

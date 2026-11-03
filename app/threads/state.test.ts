@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { callerThread, outputKey, outputLabel, threadState } from "./state";
+import { callerThread, lastAttempt, outputKey, outputLabel, threadState } from "./state";
 
 const pr = { kind: "pr", repo: "o/r", number: 1 } as const;
 const commit = { kind: "commit", repo: "o/r", sha: "abc1234", branch: "main" } as const;
@@ -16,7 +16,8 @@ describe("threadState", () => {
     ["idle", undefined, [commit], "landed"],
     ["idle", undefined, [commit, pr], "review_ready"],
     [undefined, undefined, [], "idle"],
-    ["stopped", undefined, [], "interrupted"],
+    ["stopped", undefined, [], "idle"],
+    ["stopped", undefined, [commit], "landed"],
     ["interrupted", undefined, [pr], "interrupted"],
     ["running", "done", [pr], "done"],
     ["idle", "failed", [], "failed"],
@@ -39,5 +40,36 @@ describe("helpers", () => {
     expect(callerThread("agent:")).toBeUndefined();
     expect(callerThread("window:main")).toBeUndefined();
     expect(callerThread("cli")).toBeUndefined();
+  });
+});
+
+describe("lastAttempt", () => {
+  const user = (text: string) => ({ type: "user", text, turn: "start" }) as const;
+  const end = (status: "completed" | "interrupted" | "failed") => ({ type: "turn.end", turnId: "x", status }) as const;
+  const error = (message: string) => ({ type: "error", message }) as const;
+
+  it("is not failed before anything was asked", () => {
+    expect(lastAttempt([])).toEqual({ failed: false });
+    expect(lastAttempt([error("boot notice")])).toEqual({ failed: false });
+  });
+  it("names the latest request and a turn that completed", () => {
+    expect(lastAttempt([user("a"), end("failed"), user("b"), error("using its own login"), end("completed")])).toEqual({
+      request: "b",
+      failed: false,
+    });
+  });
+  it("fails a turn that ended failed or interrupted, with the last error", () => {
+    expect(lastAttempt([user("a"), error("one"), error("two"), end("failed")])).toEqual({ request: "a", failed: true, message: "two" });
+    expect(lastAttempt([user("a"), end("interrupted")])).toEqual({ request: "a", failed: true });
+  });
+  it("fails an attempt whose harness never started", () => {
+    expect(lastAttempt([user("a"), error("missing ANTHROPIC_API_KEY")])).toEqual({
+      request: "a",
+      failed: true,
+      message: "missing ANTHROPIC_API_KEY",
+    });
+  });
+  it("is not failed while the latest request hasn't run yet", () => {
+    expect(lastAttempt([user("a"), end("failed"), user("b")])).toEqual({ request: "b", failed: false });
   });
 });

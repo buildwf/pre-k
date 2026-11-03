@@ -112,9 +112,15 @@ export default defineRouter({
         if (workspace) await rpc.call("workspaces.release", { worktree: workspace.worktree }).catch(() => undefined);
         if (scratch) await fs.rm(scratch, { recursive: true, force: true }).catch(() => undefined);
       };
+      // The project's instructions and memory (Project setup's `projects.context`, kept within Point's limit) become the
+      // thread's standing context. A thread still starts without it.
+      const context = await rpc.call("projects.context", { projectId }).catch(() => undefined);
+      const text = context?.ok ? z.string().min(1).safeParse(context.value) : undefined;
       const started = await rpc.call("agents.start", {
         agent: THREAD_AGENT,
         cwd: workspace?.worktree ?? scratch,
+        by: input.requestedBy,
+        ...(text?.success ? { context: text.data } : {}),
       });
       const threadId = started.ok ? z.string().safeParse(started.value) : undefined;
       if (!started.ok || !threadId?.success) {
@@ -222,6 +228,37 @@ export default defineRouter({
       const current = collections.get("threads", threadId) ?? thread;
       await collections.upsert("threads", [{ ...current, updatedAt: now }]);
       return { id, recorded: before ? "already" : "new" } as const;
+    }),
+
+  // Following up on a thread, finished or not: a person's next request, or a retry of one that failed. A thread the
+  // person (or the coordinator) closed is reopened first, so its state comes from its new turn again. Queued, so a
+  // follow-up never steers a turn already running. Point starts a new harness for a thread whose harness has exited.
+  followUp: procedure
+    .input(z.object({ threadId: z.string().min(1), text: z.string().trim().min(1), by: z.string().min(1).optional() }))
+    .errors({
+      NOT_A_THREAD: z.object({ threadId: z.string() }),
+      FORBIDDEN_FOR_THREADS: z.object({}),
+      SEND_FAILED: z.object({ message: z.string() }),
+    })
+    .tool()
+    .cli()
+    .handler(async ({ input, caller, collections, rpc, fail }) => {
+      // Like start: a thread's own agent doesn't hand itself, or another thread, more work.
+      const own = callerThread(caller);
+      if (own && collections.get("threads", own)) return fail("FORBIDDEN_FOR_THREADS", {});
+      const thread = collections.get("threads", input.threadId);
+      if (!thread) return fail("NOT_A_THREAD", { threadId: input.threadId });
+      const { endedAs: _ended, ...open } = thread;
+      await collections.upsert("threads", [{ ...open, updatedAt: Date.now() }]);
+      const sent = await rpc.call("agents.send", {
+        threadId: input.threadId,
+        text: input.text,
+        turn: "queue",
+        ...(input.by ? { by: input.by } : {}),
+      });
+      if (!sent.ok) return fail("SEND_FAILED", { message: messageOf(sent.failure) });
+      const r = receipt.safeParse(sent.value);
+      return { reopened: thread.endedAs !== undefined, message: r.success ? r.data : ("delivered" as const) };
     }),
 
   // Closing a thread is the person's (or the CLI's) call. No `.tool()`, so Point refuses agent callers (FORBIDDEN).

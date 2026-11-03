@@ -1,0 +1,13 @@
+{
+  "me": { "login": "zack", "name": "Zack", "url": "https://github.com/zack" },
+  "getRepo": {
+    "repo": "buildwf/pre-k-playground",
+    "description": null,
+    "private": false,
+    "defaultBranch": "main",
+    "url": "https://github.com/buildwf/pre-k-playground",
+    "stars": 0,
+    "openIssues": 0,
+    "pushedAt": "2026-11-03T18:00:00Z"
+  }
+}

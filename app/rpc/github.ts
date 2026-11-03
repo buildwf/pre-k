@@ -15,13 +15,19 @@ import { callerThread } from "../threads/state";
  */
 export default defineRouter({
   // Who pre-k acts as (pre-k#9).
-  me: procedure.handler(async ({ connectors }) => {
-    const me = await connect(github, {
-      token: await connectors.require("github"),
-    }).me({});
+  me: procedure
+    .errors({ TOKEN_REJECTED: z.object({ status: z.number() }) })
+    .handler(async ({ connectors, fail }) => {
+      try {
+        const me = await connect(github, { token: await connectors.require("github") }).me({});
 
-    return { login: me.login, name: me.name ?? null, url: me.url };
-  }),
+        return { login: me.login, name: me.name ?? null, url: me.url };
+      } catch (e) {
+        // An expired or revoked token: the window offers to connect again instead of showing an internal error.
+        if (e instanceof ConnectorError && e.status === 401) return fail("TOKEN_REJECTED", { status: e.status });
+        throw e;
+      }
+    }),
 
   /**
    * Link a repository to a project (pre-k#10): check the person's token can reach it, clone it once into the app's own
