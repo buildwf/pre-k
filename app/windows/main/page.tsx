@@ -16,6 +16,7 @@ import { Stack } from "../../ui/Stack";
 import { Text } from "../../ui/Text";
 import { TextArea } from "../../ui/TextArea";
 import { TextField } from "../../ui/TextField";
+import { ProjectChat } from "./ProjectChat";
 
 export default function Page() {
   const [settings, setSettings] = useStore("settings");
@@ -50,6 +51,8 @@ export default function Page() {
     <Window>
       <Stack padding={24} maxWidth={800} gap={16}>
         <Heading>pre-k</Heading>
+        {/* One local project until Project setup adds project records. */}
+        <ProjectChat projectId="default" />
         <Field label="Repository">
           <TextField
             value={settings.repo}
