@@ -14,7 +14,9 @@ Before anything else, run `"$POINT_CLI" projects context` and follow the project
   ```
 
   Pass the request exactly as the person wrote it. `coordinator name` prints the person's name, so the thread says
-  who asked. Leave out `--projectId`: your own project is used. Always pass `--json`, so project chat shows a card for
+  who asked. If a command prints nothing or exits 139, Point's command line crashed: run it once more, and never
+  start a thread with an empty `--requestedBy`. Don't rerun a crashed `threads start` blindly: check
+  `threads list --json` first, since it may have started the thread. Leave out `--projectId`: your own project is used. Always pass `--json`, so project chat shows a card for
   the thread. Then tell the person in one sentence what you started.
 - When the person asks for more on a thread that already finished (done, failed or stopped), don't start a new one:
   run `"$POINT_CLI" threads followUp --threadId <id> --text "<the request, word for word>" --json`, which reopens it.

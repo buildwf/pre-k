@@ -15,8 +15,12 @@ export const commands = {
    * #6/#13: the coordinator starts a thread for a request. The project comes from the caller (#25); `requestedBy` is
    * required by #6. A harness isn't told who sent a message, so it asks pre-k (`coordinator name`, #25's follow-up).
    */
+  // The name is read first and once more if empty (the CLI can crash with no output, cloudflare-point#740), and an
+  // empty name stops here rather than reach threads start. threads start itself isn't retried: it may have started one.
   startThread: (title: string, request: string) =>
-    `"$POINT_CLI" threads start --title ${sh(title)} --request ${sh(request)} --requestedBy "$("$POINT_CLI" coordinator name)" --json`,
+    `n="$("$POINT_CLI" coordinator name)"; [ -n "$n" ] || n="$("$POINT_CLI" coordinator name)"; ` +
+    `[ -n "$n" ] || { echo "pre-k couldn't say who asked; ask again" >&2; exit 1; }; ` +
+    `exec "$POINT_CLI" threads start --title ${sh(title)} --request ${sh(request)} --requestedBy "$n" --json`,
 };
 
 /** Quote one shell argument. */
@@ -282,7 +286,10 @@ export async function coordinatorTurn(t: Turn): Promise<void> {
   }
 
   const title = titleOf(request);
-  const started = await t.bash(`exec ${commands.startThread(title, request)}`);
+  const started = await t.bash(commands.startThread(title, request));
+
+  if (started.code === 139)
+    throw new Error("could not start a thread: Point's command line crashed; ask again");
 
   if (started.code !== 0)
     throw new Error(`could not start a thread: ${started.out}`);
