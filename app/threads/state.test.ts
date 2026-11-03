@@ -43,6 +43,19 @@ describe("helpers", () => {
   });
 });
 
+describe("threadState with the latest attempt", () => {
+  it("is failed at rest after a failed attempt, working while it retries, and closed wins", () => {
+    const failed = { failed: true };
+    expect(threadState("idle", undefined, [commit], failed)).toBe("failed");
+    expect(threadState("stopped", undefined, [], failed)).toBe("failed");
+    expect(threadState(undefined, undefined, [], failed)).toBe("failed");
+    expect(threadState("running", undefined, [], failed)).toBe("working");
+    expect(threadState("paused", undefined, [], failed)).toBe("blocked");
+    expect(threadState("idle", "done", [], failed)).toBe("done");
+    expect(threadState("idle", undefined, [commit], { failed: false })).toBe("landed");
+  });
+});
+
 describe("lastAttempt", () => {
   const user = (text: string) => ({ type: "user", text, turn: "start" }) as const;
   const end = (status: "completed" | "interrupted" | "failed") => ({ type: "turn.end", turnId: "x", status }) as const;

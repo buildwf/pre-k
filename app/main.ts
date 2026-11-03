@@ -1,5 +1,6 @@
 import { defineMain } from "point/app";
 import { z } from "zod";
+import { createAttemptWatcher } from "./threads/attempts";
 import { createOutbox, createRelay } from "./threads/relay";
 
 const pointThreads = z.array(
@@ -17,6 +18,8 @@ export default defineMain({
   ready({ rpc, collections, stores }) {
     const relay = createRelay();
     const outbox = createOutbox();
+    // The list's "failed" (Threads): how each thread's latest attempt went, read from its transcript while it works.
+    const attempts = createAttemptWatcher({ rpc, collections, signal: ac.signal });
     let status = new Map<string, z.infer<typeof pointThreads>[number]["status"]>();
     let seeded = false;
 
@@ -47,6 +50,7 @@ export default defineMain({
         try {
           for await (const list of rpc.stream("agents.watchThreads", {}, { signal: ac.signal })) {
             status = new Map(pointThreads.parse(list).map((t) => [t.id, t.status]));
+            attempts.update(status);
             await tick();
           }
         } catch {
