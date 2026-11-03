@@ -84,7 +84,7 @@ export default defineRouter({
     .errors({
       NOT_A_THREAD: z.object({}),
       NO_CHANGES: z.object({ message: z.string() }),
-      CONFLICT: z.object({ message: z.string() }),
+      CONFLICT: z.object({ message: z.string(), files: z.array(z.string()), next: z.string() }),
       NOT_FAST_FORWARD: z.object({ message: z.string() }),
       PUSH_REJECTED: z.object({ message: z.string() }),
     })
@@ -130,7 +130,12 @@ export default defineRouter({
         case "no-changes":
           return fail("NO_CHANGES", { message: landed.detail });
         case "conflict":
-          return fail("CONFLICT", { message: landed.detail });
+          // What the agent does next, in the failure itself, so every harness gets the same recovery.
+          return fail("CONFLICT", {
+            message: `${thread.baseBranch} changed under this thread and ${landed.files.length || "some"} file(s) conflict`,
+            files: landed.files,
+            next: `git rebase origin/${thread.baseBranch}, fix the conflicts in ${landed.files.join(", ") || "the files git names"}, git add them, git rebase --continue, then run github landOnMain again. Nothing was pushed.`,
+          });
         case "not-fast-forward":
           return fail("NOT_FAST_FORWARD", { message: landed.detail });
         case "rejected":
