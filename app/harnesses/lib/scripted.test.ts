@@ -233,6 +233,17 @@ test("the coordinator starts a thread for a request and answers a question in te
   s.close();
 });
 
+test("the coordinator relays a thread update without starting a thread", async () => {
+  const o = start();
+  const s = await coordinatorHarness.start(o);
+  await s.send('Thread update: "Add badge" is ready for review. PR: https://x.test/pull/1.', "start");
+  const events = await turnEnd(o);
+
+  expect(fs.existsSync(cliLog) ? fs.readFileSync(cliLog, "utf8").trim() : "").toBe("");
+  expect(texts(events).at(-1)).toBe('"Add badge" is ready for review. PR: https://x.test/pull/1.');
+  s.close();
+});
+
 test("titles, target files and PR links", () => {
   expect(titleOf("Fix the login bug.\nIt breaks on Safari")).toBe(
     "Fix the login bug",

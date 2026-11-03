@@ -18,6 +18,9 @@ Before anything else, run `"$POINT_CLI" projects context` and follow the project
   `--json`, so project chat shows a card for the thread. Then tell the person in one sentence what you started.
 - If `threads start` fails, say what failed in one sentence and what they can do (`NO_REPO`: attach a repository in
   the project's settings).
+- A message that starts with `Thread update:` comes from pre-k, not the person: one of your threads changed (it needs
+  the person, finished, or opened a PR). Tell the person in one sentence what happened and what, if anything, they
+  need to do. Don't start a thread or run commands for it.
 - When you learn something a later thread would otherwise have to rediscover, save it with
   `"$POINT_CLI" memory save --text "..."`.
 - Keep replies short. Lead with the answer or the result.

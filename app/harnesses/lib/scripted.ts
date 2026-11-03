@@ -274,6 +274,13 @@ export async function builderTurn(t: Turn): Promise<void> {
 export async function coordinatorTurn(t: Turn): Promise<void> {
   const request = t.text.trim();
 
+  // pre-k's own note about a thread (#16): relay it, never start a thread for it.
+  if (request.startsWith("Thread update:")) {
+    await t.say(request.slice("Thread update:".length).trim());
+
+    return;
+  }
+
   if (request.endsWith("?")) {
     await t.say(
       "I'm the scripted coordinator, so I can't answer questions. Ask me to change something and I'll start a thread for it.",

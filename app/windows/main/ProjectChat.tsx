@@ -3,6 +3,7 @@ import { rpc, useAgent, useCollection, useThreads } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../../.point/components";
 import { ThreadPullRequest } from "../../lib/ThreadPullRequest";
+import { UPDATE_PREFIX } from "../../threads/relay";
 import { startedThread } from "../../threads/started";
 import { threadState } from "../../threads/state";
 import { ApprovalPrompt } from "../../ui/ApprovalPrompt";
@@ -84,7 +85,13 @@ function Conversation({
       )}
       <MessageList>
         {agent.messages.flatMap((m) =>
-          m.role === "user" ? (
+          m.role === "user" && m.text.startsWith(UPDATE_PREFIX) ? (
+            [
+              <Text key={m.id} tone="muted">
+                {m.text}
+              </Text>,
+            ]
+          ) : m.role === "user" ? (
             [
               <Message key={m.id} from="you" pending={!m.done}>
                 {m.text}
