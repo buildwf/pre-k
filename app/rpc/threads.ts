@@ -97,7 +97,9 @@ export default defineRouter({
           createdAt: before?.createdAt ?? now,
         },
       ]);
-      await collections.upsert("threads", [{ ...thread, updatedAt: now }]);
+      // Re-read after the await so a concurrent `end` (or any other edit) isn't overwritten: only touch updatedAt.
+      const current = collections.get("threads", threadId) ?? thread;
+      await collections.upsert("threads", [{ ...current, updatedAt: now }]);
       return { id, recorded: before ? "already" : "new" } as const;
     }),
 
