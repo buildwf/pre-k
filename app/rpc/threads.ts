@@ -224,6 +224,37 @@ export default defineRouter({
       return { id, recorded: before ? "already" : "new" } as const;
     }),
 
+  // Following up on a thread, finished or not: a person's next request, or a retry of one that failed. A thread the
+  // person (or the coordinator) closed is reopened first, so its state comes from its new turn again. Queued, so a
+  // follow-up never steers a turn already running. Point starts a new harness for a thread whose harness has exited.
+  followUp: procedure
+    .input(z.object({ threadId: z.string().min(1), text: z.string().trim().min(1), by: z.string().min(1).optional() }))
+    .errors({
+      NOT_A_THREAD: z.object({ threadId: z.string() }),
+      FORBIDDEN_FOR_THREADS: z.object({}),
+      SEND_FAILED: z.object({ message: z.string() }),
+    })
+    .tool()
+    .cli()
+    .handler(async ({ input, caller, collections, rpc, fail }) => {
+      // Like start: a thread's own agent doesn't hand itself, or another thread, more work.
+      const own = callerThread(caller);
+      if (own && collections.get("threads", own)) return fail("FORBIDDEN_FOR_THREADS", {});
+      const thread = collections.get("threads", input.threadId);
+      if (!thread) return fail("NOT_A_THREAD", { threadId: input.threadId });
+      const { endedAs: _ended, ...open } = thread;
+      await collections.upsert("threads", [{ ...open, updatedAt: Date.now() }]);
+      const sent = await rpc.call("agents.send", {
+        threadId: input.threadId,
+        text: input.text,
+        turn: "queue",
+        ...(input.by ? { by: input.by } : {}),
+      });
+      if (!sent.ok) return fail("SEND_FAILED", { message: messageOf(sent.failure) });
+      const r = receipt.safeParse(sent.value);
+      return { reopened: thread.endedAs !== undefined, message: r.success ? r.data : ("delivered" as const) };
+    }),
+
   // Closing a thread is the person's (or the CLI's) call. No `.tool()`, so Point refuses agent callers (FORBIDDEN).
   end: procedure
     .input(z.object({ threadId: z.string(), as: z.enum(["done", "failed", "stopped"]) }))

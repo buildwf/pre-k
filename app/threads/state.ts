@@ -1,4 +1,4 @@
-import type { ThreadStatus } from "point/agent";
+import type { ThreadEventBody, ThreadStatus } from "point/agent";
 
 /** What the person sees for a thread, derived from Point's live status and pre-k's record. Never stored. */
 export type ThreadState =
@@ -38,8 +38,10 @@ export function threadState(
     case "paused":
       return "blocked";
     case "interrupted":
-    case "stopped":
       return "interrupted";
+    // Point reports `stopped` for any thread whose harness has exited, including one that finished its turn and was
+    // closed when the app quit, so it reads like idle. A harness that never started shows as a failed attempt.
+    case "stopped":
     case "idle":
     case undefined:
       if (outputs.some((o) => o.kind === "pr")) return "review_ready";
@@ -58,3 +60,32 @@ export const outputKey = (o: OutputLike & { threadId: string }) =>
 /** `agent:<threadId>` names the thread an agent call comes from; any other caller has none. */
 export const callerThread = (caller: string) =>
   caller.startsWith("agent:") ? caller.slice("agent:".length) || undefined : undefined;
+
+/**
+ * How the thread's latest request went, from its events: the last message the person sent, and whether the attempt
+ * after it failed. A turn that ended `failed` or `interrupted` failed; so did an attempt where an error came and no turn
+ * ended at all (the harness never started: a missing key or binary). An error notice inside a turn that completed
+ * ("using its own login") is not a failure. `message` is the last error after the request, for the person to read.
+ */
+export function lastAttempt(events: readonly ThreadEventBody[]): {
+  request?: string;
+  failed: boolean;
+  message?: string;
+} {
+  let at = -1;
+  for (let i = events.length - 1; i >= 0; i--)
+    if (events[i]?.type === "user") {
+      at = i;
+      break;
+    }
+  const asked = events[at];
+  const request = asked?.type === "user" ? asked.text : undefined;
+  let ended: "completed" | "interrupted" | "failed" | undefined;
+  let message: string | undefined;
+  for (const e of events.slice(at + 1)) {
+    if (e.type === "turn.end") ended = e.status;
+    else if (e.type === "error") message = e.message;
+  }
+  const failed = ended ? ended !== "completed" : message !== undefined && at >= 0;
+  return { ...(request !== undefined ? { request } : {}), failed, ...(failed && message ? { message } : {}) };
+}

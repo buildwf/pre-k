@@ -5,7 +5,8 @@ import { rpc, useAgent, useCollection, useThreads } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../.point/components";
 import { ThreadPullRequest } from "../lib/ThreadPullRequest";
-import { threadState, type ThreadState } from "../threads/state";
+import { lastAttempt, threadState, type ThreadState } from "../threads/state";
+import { Alert } from "../ui/Alert";
 import { ApprovalPrompt } from "../ui/ApprovalPrompt";
 import { Button } from "../ui/Button";
 import { Disclosure } from "../ui/Disclosure";
@@ -18,18 +19,32 @@ import { Stack } from "../ui/Stack";
 import { Text } from "../ui/Text";
 import { TextField } from "../ui/TextField";
 
-/** How each state reads in the list: the words a person scans for, and red for the ones waiting on them. */
-const stateLabel: Record<ThreadState, { text: string; tone: "default" | "muted" | "danger" }> = {
-  working: { text: "working", tone: "default" },
-  blocked: { text: "needs you", tone: "danger" },
-  review_ready: { text: "ready for review", tone: "default" },
-  landed: { text: "landed", tone: "default" },
-  done: { text: "done", tone: "muted" },
-  failed: { text: "failed", tone: "danger" },
-  stopped: { text: "stopped", tone: "muted" },
-  interrupted: { text: "interrupted", tone: "danger" },
-  idle: { text: "idle", tone: "muted" },
+/**
+ * How each state reads: the words a person scans for, red for the ones waiting on them, and one line on what it means
+ * and what they can do next.
+ */
+const stateWords: Record<ThreadState, { text: string; tone: "default" | "muted" | "danger"; help: string }> = {
+  working: { text: "working", tone: "default", help: "The agent is on it. Steer it, or queue what comes next." },
+  blocked: { text: "needs you", tone: "danger", help: "Paused, or waiting for you to allow a tool." },
+  review_ready: { text: "ready for review", tone: "default", help: "Opened a pull request. Review it, or follow up with changes." },
+  landed: { text: "landed", tone: "default", help: "Committed its work. Follow up to ask for more." },
+  done: { text: "done", tone: "muted", help: "Marked done. A follow-up reopens it." },
+  failed: { text: "failed", tone: "danger", help: "Marked failed. Retry it, or follow up to reopen it." },
+  stopped: { text: "stopped", tone: "muted", help: "Stopped. A follow-up reopens it." },
+  interrupted: { text: "interrupted", tone: "danger", help: "Cut off mid-turn. Retry to send the request again." },
+  idle: { text: "idle", tone: "muted", help: "Finished its turn without landing any work. Follow up to ask for more." },
 };
+
+/** An open thread whose latest attempt failed: shown in the thread view, which reads the thread's events. */
+const attemptFailed: (typeof stateWords)[ThreadState] = {
+  text: "attempt failed",
+  tone: "danger",
+  help: "The last attempt didn't finish. Retry it, or send a different request.",
+};
+
+/** "commit 3f9c2e1 on main" or "PR #12": what a thread delivered, in a list row. */
+const delivered = (o: { kind: "pr"; number: number } | { kind: "commit"; sha: string; branch: string }) =>
+  o.kind === "pr" ? `PR #${o.number}` : `landed ${o.sha.slice(0, 7)} on ${o.branch}`;
 
 /** A project's threads, newest activity first, and the one that is open. */
 export function Threads({
@@ -71,7 +86,7 @@ export function Threads({
         <List label="Threads">
           {rows.map((t) => {
             const prs = produced.filter((o) => o.threadId === t.threadId);
-            const state = stateLabel[threadState(statusOf.get(t.threadId), t.endedAs, prs)];
+            const state = stateWords[threadState(statusOf.get(t.threadId), t.endedAs, prs)];
             return (
               <ListItem
                 key={t.threadId}
@@ -81,18 +96,24 @@ export function Threads({
                   </Button>
                 }
               >
-                <Text bold>{t.title}</Text>
-                <Text tone={state.tone}>{state.text}</Text>
-                {t.branch && (
-                  <Text tone="muted" mono>
-                    {t.branch}
-                  </Text>
-                )}
-                {prs.map((o) => (
-                  <Text key={o.id} tone="muted">
-                    {o.kind === "pr" ? `PR #${o.number}` : `commit ${o.sha.slice(0, 7)}`}
-                  </Text>
-                ))}
+                <Stack gap={4}>
+                  <Stack direction="row" gap={8} align="baseline" wrap>
+                    <Text bold>{t.title}</Text>
+                    <Text tone={state.tone}>{state.text}</Text>
+                  </Stack>
+                  <Stack direction="row" gap={8} wrap>
+                    {prs.length > 0 ? (
+                      <Text tone="muted">{prs.map(delivered).join(" · ")}</Text>
+                    ) : (
+                      <Text tone="muted">asked by {t.requestedBy}</Text>
+                    )}
+                    {t.branch && (
+                      <Text tone="muted" mono>
+                        {t.branch}
+                      </Text>
+                    )}
+                  </Stack>
+                </Stack>
               </ListItem>
             );
           })}
@@ -103,7 +124,10 @@ export function Threads({
   );
 }
 
-/** One thread: the request, the agent's work as it happens, approvals, and the controls to steer or stop it. */
+/**
+ * One thread: what state it's in and what to do about it, the agent's work as it happens, what it delivered,
+ * approvals, a failed attempt with Retry, and one box to steer a running turn or follow up on a finished one.
+ */
 export function ThreadView({ threadId }: { threadId: string }) {
   const agent = useAgent(threadId);
   const threads = useCollection("threads");
@@ -115,50 +139,100 @@ export function ThreadView({ threadId }: { threadId: string }) {
   );
   const [text, setText] = useState("");
   const [problem, setProblem] = useState<string>();
-  const busy = agent.status === "running" || agent.status === "parked" || agent.status === "paused";
+  const [sending, setSending] = useState(false);
+  const busy = agent.status === "starting" || agent.status === "running" || agent.status === "parked" || agent.status === "paused";
+  const attempt = lastAttempt(agent.events);
+  const retryable = !busy && !sending && attempt.failed;
+  // A failed attempt reads as one, not as "idle", unless the thread was closed since.
+  const state =
+    retryable && !row?.endedAs
+      ? attemptFailed
+      : stateWords[threadState(agent.status, row?.endedAs, prs)];
   // A steered message's id is its steer id, so these find their message.
   const steers = new Map<string, string>();
   for (const e of agent.events) {
     if (e.type === "steer.delivered") steers.set(e.steerId, "steered");
     else if (e.type === "steer.failed") steers.set(e.steerId, `steer failed: ${e.reason}`);
   }
-  const send = (turn: "steer" | "queue") => {
-    if (!text.trim()) return;
-    void agent.send(text, { turn });
-    setText("");
+  // Not running: through main, which reopens a closed thread and queues the request (a new turn, or a new harness).
+  const followUp = async (message: string) => {
+    setSending(true);
+    const r = await rpc.threads.followUp({ threadId, text: message });
+    setSending(false);
+    setProblem(r.ok ? undefined : r.failure.code === "SEND_FAILED" ? `Couldn't send it: ${r.failure.detail.message}` : r.failure.code);
+    return r.ok;
+  };
+  const send = async (turn: "steer" | "queue") => {
+    const message = text.trim();
+    if (!message) return;
+    if (busy) {
+      void agent.send(message, { turn });
+      setText("");
+    } else if (await followUp(message)) setText("");
   };
   const end = async (as: "done" | "failed") => {
     const r = await rpc.threads.end({ threadId, as });
     setProblem(r.ok ? undefined : r.failure.code);
   };
+  const started = agent.messages.length > 0;
 
   return (
     <Stack gap={12}>
       <Stack direction="row" gap={8} align="center" justify="between" wrap>
-        <Text bold>{row?.title ?? threadId.slice(0, 8)}</Text>
+        <Heading level={3}>{row?.title ?? threadId.slice(0, 8)}</Heading>
         <Stack direction="row" gap={4} wrap>
-          <Button variant="quiet" disabled={!agent.can.pause} onClick={() => agent.pause()}>
-            Pause
-          </Button>
-          <Button variant="quiet" disabled={!agent.can.resume} onClick={() => agent.resume()}>
-            Resume
-          </Button>
-          <Button variant="quiet" disabled={!agent.can.cancel} onClick={() => agent.cancel()}>
-            Cancel
-          </Button>
-          <Button variant="quiet" onClick={() => end("done")}>
-            Mark done
-          </Button>
-          <Button variant="quiet" onClick={() => end("failed")}>
-            Mark failed
-          </Button>
+          {agent.can.pause && (
+            <Button variant="quiet" onClick={() => agent.pause()}>
+              Pause
+            </Button>
+          )}
+          {agent.can.resume && (
+            <Button variant="quiet" onClick={() => agent.resume()}>
+              Resume
+            </Button>
+          )}
+          {agent.can.cancel && (
+            <Button variant="quiet" onClick={() => agent.cancel()}>
+              Cancel
+            </Button>
+          )}
+          {!row?.endedAs && !busy && (
+            <>
+              <Button variant="quiet" onClick={() => end("done")}>
+                Mark done
+              </Button>
+              <Button variant="quiet" onClick={() => end("failed")}>
+                Mark failed
+              </Button>
+            </>
+          )}
         </Stack>
       </Stack>
-      <Text tone="muted">
-        {agent.status} · ${agent.usage.costUsd.toFixed(3)}
-        {row?.requestedBy ? ` · asked by ${row.requestedBy}` : ""}
-        {row?.branch ? ` · ${row.branch}` : ""}
-      </Text>
+      <Stack gap={4}>
+        <Stack direction="row" gap={8} align="baseline" wrap>
+          <Text tone={state.tone} bold>
+            {state.text}
+          </Text>
+          <Text tone="muted">{state.help}</Text>
+        </Stack>
+        <Text tone="muted">
+          ${agent.usage.costUsd.toFixed(3)}
+          {row?.requestedBy ? ` · asked by ${row.requestedBy}` : ""}
+          {row?.branch ? ` · ${row.branch}` : ""}
+        </Text>
+      </Stack>
+      {/* A failure comes first: it is what the person has to act on. */}
+      <Alert tone="danger">
+        {retryable && (
+          <Stack direction="row" gap={8} align="center" justify="between" wrap>
+            <Text>{attempt.message ?? "The turn ended before the agent finished."}</Text>
+            <Button variant="primary" onClick={() => void followUp(attempt.request ?? row?.request ?? "")}>
+              Retry
+            </Button>
+          </Stack>
+        )}
+      </Alert>
+      <Alert tone="danger">{problem}</Alert>
       <MessageList>
         {agent.messages.map((m) =>
           m.role === "tool" ? (
@@ -193,19 +267,10 @@ export function ThreadView({ threadId }: { threadId: string }) {
         ),
       )}
       <ApprovalPrompt pending={agent.pending} onDecide={agent.approve} />
-      {agent.events
-        .filter((e): e is typeof e & { type: "error" } => e.type === "error")
-        .slice(-1)
-        .map((e) => (
-          <Text key={e.id} tone="danger">
-            {e.message}
-          </Text>
-        ))}
-      {problem && <Text tone="danger">{problem}</Text>}
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          send("steer");
+          void send("steer");
         }}
       >
         <Stack direction="row" gap={8}>
@@ -214,14 +279,20 @@ export function ThreadView({ threadId }: { threadId: string }) {
             aria-label="Message the thread"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={busy ? "Steer the running turn, or queue for after it" : "Message the agent"}
+            placeholder={
+              busy
+                ? "Steer the running turn, or queue for after it"
+                : row?.endedAs
+                  ? "Ask for more: a follow-up reopens the thread"
+                  : started
+                    ? "Follow up with a new request"
+                    : "Message the agent"
+            }
           />
-          <Button variant="primary" type="submit">
-            {busy ? "Steer" : "Send"}
+          <Button variant="primary" type="submit" disabled={sending}>
+            {busy ? "Steer" : started ? "Follow up" : "Send"}
           </Button>
-          {busy && (
-            <Button onClick={() => send("queue")}>Queue</Button>
-          )}
+          {busy && <Button onClick={() => void send("queue")}>Queue</Button>}
         </Stack>
       </form>
     </Stack>
