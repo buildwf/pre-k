@@ -1,12 +1,14 @@
+import os from "node:os";
 import path from "node:path";
-import { app } from "electron";
 
 /**
- * Where pre-k keeps its clones of linked repos: `<userData>/checkouts/<owner>/<name>`, owned by the app so the person
- * never manages them. PRE_K_CHECKOUTS overrides it for tests and headless runs.
+ * Where pre-k keeps its clones of linked repos: `~/.pre-k/checkouts/<owner>/<name>`, beside the coordinators' folders,
+ * owned by the app so the person never manages them. Not under userData: Point denies every agent sandbox all of
+ * userData, so a builder whose worktree lived there couldn't read its own files and failed with "Unexpected".
+ * PRE_K_CHECKOUTS overrides it for tests and headless runs.
  */
 export function checkoutPath(repo: string): string {
-  const root = process.env.PRE_K_CHECKOUTS ?? path.join(app.getPath("userData"), "checkouts");
+  const root = process.env.PRE_K_CHECKOUTS ?? path.join(os.homedir(), ".pre-k", "checkouts");
 
   return path.join(root, ...repo.split("/"));
 }
