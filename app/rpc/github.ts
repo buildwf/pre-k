@@ -16,15 +16,25 @@ import { callerThread } from "../threads/state";
 export default defineRouter({
   // Who pre-k acts as (pre-k#9).
   me: procedure
-    .errors({ TOKEN_REJECTED: z.object({ status: z.number() }) })
+    .errors({
+      TOKEN_REJECTED: z.object({ status: z.number() }),
+      GITHUB_FAILED: z.object({ status: z.number(), message: z.string() }),
+      UNREACHABLE: z.object({ message: z.string() }),
+    })
     .handler(async ({ connectors, fail }) => {
+      // Outside the try: CONNECTOR_NOT_CONNECTED is the framework's own failure, so the window shows Connect.
+      const token = await connectors.require("github");
+
       try {
-        const me = await connect(github, { token: await connectors.require("github") }).me({});
+        const me = await connect(github, { token }).me({});
 
         return { login: me.login, name: me.name ?? null, url: me.url };
       } catch (e) {
         // An expired or revoked token: the window offers to connect again instead of showing an internal error.
         if (e instanceof ConnectorError && e.status === 401) return fail("TOKEN_REJECTED", { status: e.status });
+        if (e instanceof ConnectorError) return fail("GITHUB_FAILED", { status: e.status, message: e.message });
+        // No answer at all (offline, DNS, a proxy): typed, so the window says so and nothing counts it as a crash.
+        if (e instanceof Error) return fail("UNREACHABLE", { message: e.message });
         throw e;
       }
     }),

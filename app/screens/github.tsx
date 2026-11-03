@@ -69,6 +69,14 @@ export function GitHub({ project }: { project: Project }) {
           {!github.canConnect && (
             <Text tone="muted">Connecting turns on once pre-k has its GitHub OAuth app. Until then it uses GITHUB_TOKEN.</Text>
           )}
+          {me.failure?.code === "UNREACHABLE" && (
+            <Stack direction="row" gap={8} align="center">
+              <Text tone="muted">Can't reach GitHub right now.</Text>
+              <Button variant="quiet" onClick={() => me.refetch()}>
+                Try again
+              </Button>
+            </Stack>
+          )}
           {me.failure?.code === "TOKEN_REJECTED" && (
             <Text tone="danger">GitHub refused the saved token{source(github.connected)}. Connect again, or replace it.</Text>
           )}

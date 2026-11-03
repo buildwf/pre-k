@@ -7,8 +7,10 @@ import github from "./github";
 
 describe("github.me", () => {
   let refused = false;
+  let offline = false;
   const fake = fakeConnector(githubConnector, {
     me: () => {
+      if (offline) throw new TypeError("fetch failed");
       if (refused) throw new ConnectorError("github", 401, "Bad credentials");
       return { login: "octo-pre-k", name: null, url: "https://github.com/octo-pre-k" };
     },
@@ -33,6 +35,14 @@ describe("github.me", () => {
 
     refused = false;
     expect(r.ok ? null : r.failure.code).toBe("TOKEN_REJECTED");
+  });
+
+  it("fails UNREACHABLE when GitHub doesn't answer, so offline isn't an internal error", async () => {
+    offline = true;
+    const r = await rpc.me();
+
+    offline = false;
+    expect(r.ok ? null : r.failure).toEqual({ code: "UNREACHABLE", detail: { message: "fetch failed" } });
   });
 });
 
