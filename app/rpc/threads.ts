@@ -5,8 +5,8 @@ import { callerThread, outputKey, threadState } from "../threads/state";
 const status = z.enum(["starting", "running", "parked", "paused", "idle", "stopped", "interrupted"]);
 const pointThreads = z.array(z.object({ id: z.string(), status }));
 
-// The agent new threads run. `builder` arrives with #19; until then the scaffold's coder does the work.
-export const THREAD_AGENT = "coder";
+// The agent new threads run: the builder from #19 (Claude Code; `builder-codex` and `builder-opencode` pick another harness).
+export const THREAD_AGENT = "builder";
 
 const prepared = z.object({ repo: z.string(), baseBranch: z.string(), branch: z.string(), worktree: z.string() });
 const failure = z.object({ code: z.string(), detail: z.unknown() });
