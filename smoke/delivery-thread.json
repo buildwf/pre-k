@@ -1,0 +1,6 @@
+[
+  { "call": "threads.start", "input": { "projectId": "default", "title": "Add a README badge", "request": "Add a README badge", "requestedBy": "Zack" } },
+  { "waitText": "idle" },
+  { "click": "Open" },
+  { "waitText": "Opened PR #12" }
+]

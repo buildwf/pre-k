@@ -3,6 +3,7 @@ import { z } from "zod";
 import { rpc, useAgent, useCollection, useThreads } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../.point/components";
+import { ThreadPullRequest } from "../lib/ThreadPullRequest";
 import { threadState, type ThreadState } from "../threads/state";
 import { ApprovalPrompt } from "../ui/ApprovalPrompt";
 import { Button } from "../ui/Button";
@@ -95,6 +96,10 @@ export function ThreadView({ threadId }: { threadId: string }) {
   const threads = useCollection("threads");
   const { data } = useLiveQuery((q) => q.from({ t: threads }).where(({ t }) => eq(t.threadId, threadId)));
   const row = data[0];
+  const outputs = useCollection("thread-outputs");
+  const { data: prs } = useLiveQuery((q) =>
+    q.from({ o: outputs }).where(({ o }) => eq(o.threadId, threadId)).orderBy(({ o }) => o.createdAt, "asc"),
+  );
   const [text, setText] = useState("");
   const [problem, setProblem] = useState<string>();
   const busy = agent.status === "running" || agent.status === "parked" || agent.status === "paused";
@@ -165,6 +170,10 @@ export function ThreadView({ threadId }: { threadId: string }) {
       {/* Components the agent rendered (its summary); props were validated by the runtime before the ui event. */}
       {agent.ui.map((u) => (
         <div key={u.id}>{render(u)}</div>
+      ))}
+      {/* What the thread delivered, read live from GitHub (Review and delivery, #1). */}
+      {prs.map((o) => (
+        <ThreadPullRequest key={o.id} repo={o.repo} number={o.number} />
       ))}
       <ApprovalPrompt pending={agent.pending} onDecide={agent.approve} />
       {agent.events

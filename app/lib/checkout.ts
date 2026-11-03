@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { branchName } from "../schemas/github";
+import type { ReleaseResult } from "../schemas/workspace";
 
 /**
  * Plain git for pre-k's checkouts (pre-k#10, #12, #14): one app-owned clone per linked repo, one worktree and branch
@@ -122,7 +123,7 @@ export async function releaseWorktree(o: {
   base: string;
   /** For a private repo: checking what was pushed talks to the remote. */
   token: string | null;
-}): Promise<{ removed: true } | { removed: false; reason: "uncommitted" | "unpushed" }> {
+}): Promise<ReleaseResult> {
   if (!(await exists(o.worktree))) return { removed: true };
   if (await dirty(o.worktree)) return { removed: false, reason: "uncommitted" };
   if ((await unpushed(o.worktree, o.branch, o.base, o.token)) > 0) return { removed: false, reason: "unpushed" };
