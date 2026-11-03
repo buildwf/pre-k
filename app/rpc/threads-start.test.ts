@@ -1,4 +1,8 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { testClient } from "point/rpc/testing";
+import { z } from "zod";
 import { afterEach, describe, expect, it } from "vitest";
 import threads from "../collections/threads.collection";
 import outputs from "../collections/thread-outputs.collection";
@@ -69,20 +73,25 @@ describe("threads.start", () => {
     expect(fromAgent.ok ? null : fromAgent.failure.code).toBe("NO_PROJECT");
   });
 
-  it("starts a thread without a worktree when the project has no repo", async () => {
+  it("gives a thread with no repo an empty scratch folder, never the app's own directory", async () => {
     const main = fakeMain({ "workspaces.prepare": no("NO_REPO") });
     const { rpc, collections } = client("window:main", main);
     const r = await rpc.start(input);
     expect(r.ok && r.value.branch).toBeUndefined();
-    expect(main.calls.find((c) => c.path === "agents.start")?.input).toEqual({ agent: THREAD_AGENT });
+    const cwd = z.object({ cwd: z.string() }).parse(main.calls.find((c) => c.path === "agents.start")?.input).cwd;
+    expect(cwd.startsWith(path.join(os.tmpdir(), "pre-k-thread-"))).toBe(true);
+    expect(cwd).not.toBe(process.cwd());
+    expect(await fs.readdir(cwd)).toEqual([]);
     expect(collections.get("threads", "t1")?.worktree).toBeUndefined();
+    await fs.rm(cwd, { recursive: true });
   });
 
-  it("starts without a worktree while the app has no workspaces router", async () => {
-    const main = fakeMain({ "workspaces.prepare": no("NOT_FOUND") });
+  it("removes the scratch folder when the agent can't start", async () => {
+    const main = fakeMain({ "workspaces.prepare": no("NO_REPO"), "agents.start": no("INTERNAL") });
     const r = await client("window:main", main).rpc.start(input);
-    expect(r.ok && r.value.firstMessage).toBe("delivered");
-    expect(main.calls.find((c) => c.path === "agents.start")?.input).toEqual({ agent: THREAD_AGENT });
+    expect(r.ok ? null : r.failure.code).toBe("AGENT_START_FAILED");
+    const cwd = z.object({ cwd: z.string() }).parse(main.calls.find((c) => c.path === "agents.start")?.input).cwd;
+    await expect(fs.stat(cwd)).rejects.toThrow();
   });
 
   it("stops before starting an agent when the workspace can't be prepared", async () => {
