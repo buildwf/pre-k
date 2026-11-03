@@ -11,12 +11,21 @@ const notFound = { NOT_FOUND: z.object({ id: z.string() }) };
 // (`point cli projects create --name ...`), so smoke runs and scripts drive the same path as the window.
 export default defineRouter({
   create: procedure
-    .input(project.pick({ name: true }).extend({ instructions: z.string().default("") }))
+    .input(
+      project.pick({ name: true }).extend({
+        instructions: z.string().default(""),
+        // A chosen id, so a smoke run or script can name the project in its later steps. Default: a random one.
+        id: z.string().trim().min(1).max(64).optional(),
+      }),
+    )
     .output(z.object({ id: z.string() }))
+    .errors({ EXISTS: z.object({ id: z.string() }) })
     .cli()
-    .handler(async ({ input, collections }) => {
+    .handler(async ({ input, collections, fail }) => {
       const now = Date.now();
-      const id = randomUUID();
+      const id = input.id ?? randomUUID();
+
+      if (collections.get("projects", id)) return fail("EXISTS", { id });
 
       await collections.upsert("projects", [
         { id, name: input.name, instructions: input.instructions, createdAt: now, lastOpenedAt: now },

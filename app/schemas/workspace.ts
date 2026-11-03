@@ -17,3 +17,10 @@ export const releaseResult = z.object({
 });
 
 export type ReleaseResult = z.infer<typeof releaseResult>;
+
+// A project's linked repo, as github.linkRepo stores it and workspaces.prepare reads it.
+export const linkedRepo = z.object({
+  repo: z.string().min(1),
+  defaultBranch: z.string().min(1),
+  checkoutPath: z.string().min(1),
+});

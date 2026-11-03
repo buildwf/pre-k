@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { defineRouter, procedure } from "point/app";
 import { z } from "zod";
-import { preparedWorkspace, releaseResult } from "../schemas/workspace";
+import { linkedRepo as linked, preparedWorkspace, releaseResult } from "../schemas/workspace";
 import {
   addWorktree,
   fetchOrigin,
@@ -17,11 +17,6 @@ import {
  * beside the project's checkout (`<checkout>.worktrees/<branch>`), so they share its objects.
  */
 
-const linked = z.object({
-  repo: z.string().min(1),
-  defaultBranch: z.string().min(1),
-  checkoutPath: z.string().min(1),
-});
 
 const WORKTREES = ".worktrees";
 
