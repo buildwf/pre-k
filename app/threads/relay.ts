@@ -1,5 +1,5 @@
 import type { ThreadStatus } from "point/agent";
-import { threadState, type EndedAs, type ThreadState } from "./state";
+import { outputLabel, threadState, type EndedAs, type OutputLike, type ThreadState } from "./state";
 
 /** What the relay needs to know about one pre-k thread, from the threads and thread-outputs collections. */
 export interface RelayThread {
@@ -7,7 +7,8 @@ export interface RelayThread {
   projectId: string;
   title: string;
   endedAs?: EndedAs | undefined;
-  prs: { repo: string; number: number; url?: string | undefined }[];
+  /** What it delivered: PRs and landed commits. */
+  prs: (OutputLike & { url?: string | undefined })[];
 }
 
 /** A line for one project's coordinator. */
@@ -24,6 +25,7 @@ const words: Record<ThreadState, string> = {
   working: "is working",
   blocked: "is waiting for you (an approval or a paused turn)",
   review_ready: "is ready for review",
+  landed: "landed its work",
   done: "is done",
   failed: "failed",
   stopped: "was stopped",
@@ -41,17 +43,20 @@ export function createRelay() {
   return (threads: RelayThread[], status: Map<string, ThreadStatus>, opts: { seed?: boolean } = {}) => {
     const notes: RelayNote[] = [];
     for (const t of threads) {
-      const state = threadState(status.get(t.threadId), t.endedAs, t.prs.length);
-      const key = `${state}|${t.prs.map((p) => `${p.repo}#${p.number}`).join(",")}`;
+      const state = threadState(status.get(t.threadId), t.endedAs, t.prs);
+      const key = `${state}|${t.prs.map(outputLabel).join(",")}`;
       const before = seen.get(t.threadId);
       const worked = (before?.worked ?? false) || state === "working" || Boolean(t.endedAs) || Boolean(opts.seed);
       seen.set(t.threadId, { worked, last: key });
       if (opts.seed || state === "working" || !worked || before?.last === key) continue;
-      const prs = t.prs.map((p) => p.url ?? `${p.repo}#${p.number}`).join(", ");
+      const list = (kind: OutputLike["kind"]) =>
+        t.prs.filter((p) => p.kind === kind).map((p) => p.url ?? outputLabel(p)).join(", ");
+      const prs = list("pr");
+      const commits = list("commit");
       notes.push({
         projectId: t.projectId,
         threadId: t.threadId,
-        text: `${UPDATE_PREFIX} "${t.title}" ${words[state]}.${prs ? ` PR: ${prs}.` : ""}`,
+        text: `${UPDATE_PREFIX} "${t.title}" ${words[state]}.${prs ? ` PR: ${prs}.` : ""}${commits ? ` Commit: ${commits}.` : ""}`,
       });
     }
     return notes;

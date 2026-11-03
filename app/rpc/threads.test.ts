@@ -88,6 +88,26 @@ describe("threads.report", () => {
   });
 });
 
+describe("threads.report for a landed commit", () => {
+  it("records a commit once and shows the thread as landed", async () => {
+    const commit = { kind: "commit", repo: "buildwf/test-repo", sha: "0123abc", branch: "main" } as const;
+    const first = await agent.report({ ...commit, title: "Add a README badge" });
+    const again = await agent.report({ ...commit, url: "https://github.com/buildwf/test-repo/commit/0123abc" });
+    expect(first.ok && first.value.recorded).toBe("new");
+    expect(again.ok && again.value.recorded).toBe("already");
+    expect(collections.all("thread-outputs")).toEqual([
+      expect.objectContaining({ ...commit, title: "Add a README badge", url: "https://github.com/buildwf/test-repo/commit/0123abc" }),
+    ]);
+    const r = await agent.list({ projectId: "p1" });
+    expect(r.ok && r.value.find((t) => t.threadId === "t2")?.state).toBe("landed");
+  });
+
+  it("refuses a commit without a sha or branch", async () => {
+    const r = await agent.report({ kind: "commit", repo: "buildwf/test-repo", sha: "not-a-sha", branch: "main" });
+    expect(r.ok ? null : r.failure.code).toBe("BAD_INPUT");
+  });
+});
+
 describe("threads.end", () => {
   it("lets a window close a thread, and not an agent", async () => {
     const byAgent = await agent.end({ threadId: "t2", as: "done" });

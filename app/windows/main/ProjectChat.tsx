@@ -5,7 +5,7 @@ import { render } from "../../../.point/components";
 import { ThreadPullRequest } from "../../lib/ThreadPullRequest";
 import { UPDATE_PREFIX } from "../../threads/relay";
 import { startedThread } from "../../threads/started";
-import { threadState } from "../../threads/state";
+import { outputLabel, threadState } from "../../threads/state";
 import { ApprovalPrompt } from "../../ui/ApprovalPrompt";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
@@ -168,6 +168,7 @@ const stateWords = {
   working: "working",
   blocked: "needs you",
   review_ready: "ready for review",
+  landed: "landed",
   done: "done",
   failed: "failed",
   stopped: "stopped",
@@ -190,7 +191,7 @@ function StartedThread({
   const { data: prs } = useLiveQuery((q) => q.from({ o: outputs }).where(({ o }) => eq(o.threadId, threadId)));
   const row = rows[0];
   if (!row) return null;
-  const state = threadState(live.find((t) => t.id === threadId)?.status, row.endedAs, prs.length);
+  const state = threadState(live.find((t) => t.id === threadId)?.status, row.endedAs, prs);
 
   return (
     <Card>
@@ -209,9 +210,15 @@ function StartedThread({
             {row.branch}
           </Text>
         )}
-        {prs.map((o) => (
-          <ThreadPullRequest key={o.id} repo={o.repo} number={o.number} />
-        ))}
+        {prs.map((o) =>
+          o.kind === "pr" ? (
+            <ThreadPullRequest key={o.id} repo={o.repo} number={o.number} />
+          ) : (
+            <Text key={o.id} tone="muted" mono>
+              Landed on {o.branch}: {o.title ?? outputLabel(o)}
+            </Text>
+          ),
+        )}
       </Stack>
     </Card>
   );
