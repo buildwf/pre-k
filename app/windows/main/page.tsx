@@ -54,7 +54,7 @@ export default function Page() {
         <Projects>
           {(project) => (
             <>
-        <ProjectChat projectId={project.id} />
+        <ProjectChat key={project.id} projectId={project.id} />
         <Field label="Repository">
           <TextField
             value={settings.repo}
@@ -90,7 +90,6 @@ export default function Page() {
           />
         </Disclosure>
         {problem && <Text tone="danger">{problem}</Text>}
-        {/* One local project until Project setup adds project records. */}
         <Threads key={project.id} projectId={project.id} />
         {threadId ? (
           <Chat threadId={threadId} />
