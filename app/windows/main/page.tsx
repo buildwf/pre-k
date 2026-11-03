@@ -3,6 +3,7 @@ import { z } from "zod";
 import { rpc, useAgent, useStore } from "point/client";
 import { render } from "../../../.point/components";
 import { persona, type Persona } from "../../schemas/persona";
+import { Threads } from "../../screens/threads";
 import { ApprovalPrompt } from "../../ui/ApprovalPrompt";
 import { Button } from "../../ui/Button";
 import { Disclosure } from "../../ui/Disclosure";
@@ -88,6 +89,8 @@ export default function Page() {
           />
         </Disclosure>
         {problem && <Text tone="danger">{problem}</Text>}
+        {/* One local project until Project setup adds project records. */}
+        <Threads projectId="default" />
         {threadId ? (
           <Chat threadId={threadId} />
         ) : (
