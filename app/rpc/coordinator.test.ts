@@ -72,6 +72,21 @@ describe("coordinator.ensure", () => {
     c.close();
   });
 
+  it("gives overlapping calls for one project the same coordinator", async () => {
+    let n = 0;
+    const slow: MainCalls["call"] = async (p) => {
+      if (p !== "agents.start") return { ok: true, value: [] };
+      await new Promise((r) => setTimeout(r, 20));
+      return { ok: true, value: `s${++n}` };
+    };
+    const c = testClient(coordinator, { rpc: { call: slow }, stores: { coordinators: { threads: {} } } });
+    const [a, b] = await Promise.all([c.rpc.ensure({ projectId: "p7" }), c.rpc.ensure({ projectId: "p7" })]);
+    expect(a).toEqual({ ok: true, value: { threadId: "s1" } });
+    expect(b).toEqual(a);
+    expect(n).toBe(1);
+    c.close();
+  });
+
   it("keeps the stored coordinator when the thread lookup fails", async () => {
     const down: MainCalls["call"] = async () => ({
       ok: false,
@@ -93,5 +108,16 @@ describe("coordinator.ensure", () => {
   it("refuses a project id that isn't a plain name", async () => {
     const r = await rpc.ensure({ projectId: "../x" });
     expect(r.ok ? null : r.failure.code).toBe("BAD_INPUT");
+  });
+
+  it("maps a coordinator thread back to its project", async () => {
+    const c = testClient(coordinator, {
+      caller: "main",
+      stores: { coordinators: { threads: { p1: "t1", p2: "t2" } } },
+    });
+    expect(await c.rpc.projectOf({ threadId: "t2" })).toEqual({ ok: true, value: "p2" });
+    const miss = await c.rpc.projectOf({ threadId: "builder-1" });
+    expect(miss.ok ? null : miss.failure.code).toBe("NOT_A_COORDINATOR");
+    c.close();
   });
 });

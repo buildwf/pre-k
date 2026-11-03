@@ -3,6 +3,8 @@ import { rpc, useAgent } from "point/client";
 import { render } from "../../../.point/components";
 import { ApprovalPrompt } from "../../ui/ApprovalPrompt";
 import { Button } from "../../ui/Button";
+import { EmptyState } from "../../ui/EmptyState";
+import { Field } from "../../ui/Field";
 import { Heading } from "../../ui/Heading";
 import { Message } from "../../ui/Message";
 import { MessageList } from "../../ui/MessageList";
@@ -57,6 +59,12 @@ function Conversation({ threadId }: { threadId: string }) {
       <Text tone="muted">
         Coordinator · {agent.status} · ${agent.usage.costUsd.toFixed(3)}
       </Text>
+      {agent.messages.length === 0 && (
+        <EmptyState title="Start the project chat">
+          Ask the coordinator about the project, or describe work for it to hand to a thread. Type below and press
+          Enter.
+        </EmptyState>
+      )}
       <MessageList>
         {agent.messages.flatMap((m) =>
           m.role === "user" ? (
@@ -105,13 +113,14 @@ function Conversation({ threadId }: { threadId: string }) {
         }}
       >
         <Stack direction="row" gap={8}>
-          <TextField
-            wide
-            aria-label="Message the coordinator"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={busy ? "Queue a message for after this turn" : "Ask or hand off work"}
-          />{" "}
+          <Field label="Message the coordinator">
+            <TextField
+              wide
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={busy ? "Queue a message for after this turn" : "Ask or hand off work"}
+            />
+          </Field>{" "}
           <Button variant="primary" type="submit">
             {busy ? "Queue" : "Send"}
           </Button>
