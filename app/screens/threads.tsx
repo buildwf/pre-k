@@ -29,7 +29,7 @@ const stateWords: Record<ThreadState, { text: string; tone: "default" | "muted" 
   review_ready: { text: "ready for review", tone: "default", help: "Opened a pull request. Review it, or follow up with changes." },
   landed: { text: "landed", tone: "default", help: "Committed its work. Follow up to ask for more." },
   done: { text: "done", tone: "muted", help: "Marked done. A follow-up reopens it." },
-  failed: { text: "failed", tone: "danger", help: "Marked failed. Retry it, or follow up to reopen it." },
+  failed: { text: "failed", tone: "danger", help: "Failed. Open it to see why, then retry or follow up." },
   stopped: { text: "stopped", tone: "muted", help: "Stopped. A follow-up reopens it." },
   interrupted: { text: "interrupted", tone: "danger", help: "Cut off mid-turn. Retry to send the request again." },
   idle: { text: "idle", tone: "muted", help: "Finished its turn without landing any work. Follow up to ask for more." },
@@ -40,6 +40,12 @@ const attemptFailed: (typeof stateWords)[ThreadState] = {
   text: "attempt failed",
   tone: "danger",
   help: "The last attempt didn't finish. Retry it, or send a different request.",
+};
+
+/** The first line of an error, at most 80 characters. */
+const short = (message: string | undefined) => {
+  const line = message?.split("\n")[0]?.trim();
+  return line && line.length > 80 ? `${line.slice(0, 79)}…` : line || undefined;
 };
 
 /** "commit 3f9c2e1 on main" or "PR #12": what a thread delivered, in a list row. */
@@ -86,7 +92,10 @@ export function Threads({
         <List label="Threads">
           {rows.map((t) => {
             const prs = produced.filter((o) => o.threadId === t.threadId);
-            const state = stateWords[threadState(statusOf.get(t.threadId), t.endedAs, prs)];
+            const named = threadState(statusOf.get(t.threadId), t.endedAs, prs, t.lastAttempt);
+            const state = stateWords[named];
+            // Why it failed, in a few words, so the list says what went wrong without opening the thread.
+            const why = named === "failed" && !t.endedAs ? short(t.lastAttempt?.message) : undefined;
             return (
               <ListItem
                 key={t.threadId}
@@ -99,7 +108,7 @@ export function Threads({
                 <Stack gap={4}>
                   <Stack direction="row" gap={8} align="baseline" wrap>
                     <Text bold>{t.title}</Text>
-                    <Text tone={state.tone}>{state.text}</Text>
+                    <Text tone={state.tone}>{why ? `${state.text}: ${why}` : state.text}</Text>
                   </Stack>
                   <Stack direction="row" gap={8} wrap>
                     {prs.length > 0 ? (
