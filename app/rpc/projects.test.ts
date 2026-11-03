@@ -17,6 +17,15 @@ describe("projects", () => {
     expect(got.ok && got.value).toMatchObject({ name: "Test", instructions: "Use pnpm." });
   });
 
+  it("takes a chosen id once, so later steps can name the project", async () => {
+    const r = await rpc.create({ name: "Smoke", id: "smoke" });
+
+    expect(r.ok && r.value).toEqual({ id: "smoke" });
+    const again = await rpc.create({ name: "Other", id: "smoke" });
+    expect(again.ok ? null : again.failure.code).toBe("EXISTS");
+    expect(collections.get("projects", "smoke")).toMatchObject({ name: "Smoke" });
+  });
+
   it("refuses a blank name", async () => {
     const r = await rpc.create({ name: "   " });
 
