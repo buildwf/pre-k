@@ -3,12 +3,12 @@ import { z } from "zod";
 import { rpc, useAgent, useStore } from "point/client";
 import { render } from "../../../.point/components";
 import { persona, type Persona } from "../../schemas/persona";
+import { Projects } from "../../screens/projects";
 import { ApprovalPrompt } from "../../ui/ApprovalPrompt";
 import { Button } from "../../ui/Button";
 import { Disclosure } from "../../ui/Disclosure";
 import { EmptyState } from "../../ui/EmptyState";
 import { Field } from "../../ui/Field";
-import { Heading } from "../../ui/Heading";
 import { Message } from "../../ui/Message";
 import { MessageList } from "../../ui/MessageList";
 import { Window } from "../../ui/Window";
@@ -49,7 +49,9 @@ export default function Page() {
   return (
     <Window>
       <Stack padding={24} maxWidth={800} gap={16}>
-        <Heading>pre-k</Heading>
+        <Projects>
+          {() => (
+            <>
         <Field label="Repository">
           <TextField
             value={settings.repo}
@@ -93,6 +95,9 @@ export default function Page() {
             come.
           </EmptyState>
         )}
+            </>
+          )}
+        </Projects>
       </Stack>
     </Window>
   );
