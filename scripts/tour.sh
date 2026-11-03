@@ -13,8 +13,22 @@ taken=$(cat docs/ui-tour/.source 2>/dev/null || true)
 
 shots=.point/smoke/tour-$(date +%s)-$$
 mkdir -p .point/smoke
-PREK_HARNESS=scripted bunx point smoke --no-secrets --screenshot "$shots" --steps smoke/ui-tour.json --timeout 60000 \
-  >"$shots.log" 2>&1 || { cat "$shots.log"; exit 1; }
+# Point's app CLI ($POINT_CLI, which the scripted agents call) segfaults on about 1 headless call in 10
+# (buildwf/cloudflare-point#740), which fails a step at random. Until that's fixed, a failed run is retried up to
+# twice; every failure is still printed, and three failures in a row fail verify. Remove this loop when #740 lands.
+attempt=1
+until PREK_HARNESS=scripted bunx point smoke --no-secrets --screenshot "$shots" --steps smoke/ui-tour.json \
+  --timeout 60000 >"$shots.log" 2>&1; do
+  if [ "$attempt" -ge 3 ]; then
+    cat "$shots.log"
+    echo "tour: failed $attempt times in a row, so this is not the #740 flake" >&2
+    exit 1
+  fi
+  echo "tour: attempt $attempt failed, retrying (cloudflare-point#740):" >&2
+  grep -E 'FAILED|error:' "$shots.log" | head -5 >&2
+  attempt=$((attempt + 1))
+  rm -rf "$shots"
+done
 grep -E '^point smoke' "$shots.log"
 
 if [ "$source" = "$taken" ] && [ "$1" != "--force" ]; then
