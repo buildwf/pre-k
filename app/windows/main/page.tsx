@@ -4,6 +4,7 @@ import { rpc, useAgent, useStore } from "point/client";
 import { render } from "../../../.point/components";
 import { persona, type Persona } from "../../schemas/persona";
 import { Delivered } from "../../screens/delivered";
+import { GitHub } from "../../screens/github";
 import { Projects } from "../../screens/projects";
 import { Threads } from "../../screens/threads";
 import { ApprovalPrompt } from "../../ui/ApprovalPrompt";
@@ -56,6 +57,7 @@ export default function Page() {
         <Projects>
           {(project) => (
             <>
+        <GitHub project={project} />
         <ProjectChat key={project.id} projectId={project.id} onOpenThread={setOpenThread} />
         <Field label="Repository">
           <TextField
