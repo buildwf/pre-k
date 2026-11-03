@@ -12,15 +12,15 @@ resume, a git worker, the `agents` daemon). Domain work builds on it from here.
 
 | | |
 |---|---|
-| Repo | https://github.com/buildwf/pre-k, `main` is the default branch. Work on feature branches and open PRs. |
+| Repo | https://github.com/buildwf/pre-k, Work on a branch from `main` and merge straight to `main` once `pnpm verify` passes. No PRs (Zack, 2026-11-03: he is the only user). |
 | Framework | Point, linked from a sibling checkout: `"point": "link:../cloudflare-point"`. `point.lock` pins the Point commit and its check rules. Bump with `pnpm exec point upgrade`. |
 | Setup | `sh scripts/setup.sh` (clones and builds Point next to this repo if missing, installs, fetches Electron). |
 | Run | `pnpm dev` opens the desktop app with reload. Needs `claude` on `PATH`, and `ANTHROPIC_API_KEY` or the keychain item `point`/`anthropic` (or Claude Code's saved login). |
 | Headless check | `pnpm exec point smoke --screenshot .point/smoke/shots [steps]`, e.g. `--click "New thread" --wait-text "idle"`. Runs under `xvfb-run` on Linux. |
-| Checks | `pnpm lint` (`point check` with types), `pnpm test`, `pnpm verify` (lint, test, build). `pnpm verify` passing on the PR head with `main` merged in is the merge gate. There is no cloud CI. |
+| Checks | `pnpm lint` (`point check` with types), `pnpm test`, `pnpm verify` (lint, test, build). `pnpm verify` passing with current `main` merged in is the merge gate. There is no cloud CI. |
 | Release | `point build` then `point release`. Not set up: no update feed, signing or Cloudflare account configured. |
 | Execution | Cloud sessions (clone both repos side by side under one folder). Zack's Mac: `~/Projects/pre-k` next to `~/Projects/cloudflare-point`. |
-| Authority | Opening PRs: yes. Merge, deploy and spending: not granted. Dev apps stay closed (Zack, 2026-11-01): verify headless with `point smoke` and screenshots, never launch or focus a window on Zack's machine. |
+| Authority | Merging to `main`: yes. Deploy and spending: not granted. Dev apps stay closed (Zack, 2026-11-01): verify headless with `point smoke` and screenshots, never launch or focus a window on Zack's machine. |
 | Point gaps | File them as issues on `buildwf/cloudflare-point`; don't patch Point from pre-k. |
 
 ## Domains
