@@ -2,6 +2,7 @@ import { useState } from "react";
 import { z } from "zod";
 import { rpc, useAgent, useCollection, useThreads } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
+import { render } from "../../.point/components";
 import { threadState, type ThreadState } from "../threads/state";
 import { ApprovalPrompt } from "../ui/ApprovalPrompt";
 import { Button } from "../ui/Button";
@@ -161,6 +162,10 @@ export function ThreadView({ threadId }: { threadId: string }) {
           ),
         )}
       </MessageList>
+      {/* Components the agent rendered (its summary); props were validated by the runtime before the ui event. */}
+      {agent.ui.map((u) => (
+        <div key={u.id}>{render(u)}</div>
+      ))}
       <ApprovalPrompt pending={agent.pending} onDecide={agent.approve} />
       {agent.events
         .filter((e): e is typeof e & { type: "error" } => e.type === "error")
