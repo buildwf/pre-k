@@ -5,6 +5,38 @@ import { callerThread, outputKey, threadState } from "../threads/state";
 const status = z.enum(["starting", "running", "parked", "paused", "idle", "stopped", "interrupted"]);
 const pointThreads = z.array(z.object({ id: z.string(), status }));
 
+// The agent new threads run. `builder` arrives with #19; until then the scaffold's coder does the work.
+export const THREAD_AGENT = "coder";
+
+const prepared = z.object({ repo: z.string(), baseBranch: z.string(), branch: z.string(), worktree: z.string() });
+const failure = z.object({ code: z.string(), detail: z.unknown() });
+const receipt = z.enum(["delivered", "queued", "rejected"]);
+
+const messageOf = (f: unknown) => {
+  const parsed = failure.safeParse(f);
+  if (!parsed.success) return "unknown failure";
+  const d = parsed.data.detail;
+  const m = d && typeof d === "object" && "message" in d ? String(d.message) : undefined;
+  return m ? `${parsed.data.code}: ${m}` : parsed.data.code;
+};
+
+/**
+ * The project a call is about: the `projectId` it passed, else, for a coordinator agent, the project it coordinates
+ * (Coordinator chat's `coordinators.projectOf`), so the coordinator never has to know its own id.
+ */
+async function projectFor(
+  given: string | undefined,
+  caller: string,
+  rpc: { call: (path: string, input: unknown) => Promise<{ ok: boolean; value?: unknown }> },
+) {
+  if (given) return given;
+  const own = callerThread(caller);
+  if (!own) return undefined;
+  const r = await rpc.call("coordinators.projectOf", { threadId: own }).catch(() => undefined);
+  const id = r?.ok ? z.string().min(1).safeParse(r.value) : undefined;
+  return id?.success ? id.data : undefined;
+}
+
 const output = z.object({
   kind: z.literal("pr"),
   repo: z.string(),
@@ -28,12 +60,95 @@ const listed = z.object({
 // The coordinator agent reads a project's threads before starting one (`"$POINT_CLI" threads list --projectId p1`);
 // a thread's agent records what it delivered (`"$POINT_CLI" threads report --kind pr --repo o/r --number 12`).
 export default defineRouter({
-  list: procedure
-    .input(z.object({ projectId: z.string().min(1) }))
-    .output(z.array(listed))
+  // The coordinator starts a thread for a request: `"$POINT_CLI" threads start --projectId p1 --title "Add badge"
+  // --request "..." --requestedBy Zack`. One worktree per thread (#12's workspaces.prepare), one Point thread in it, a
+  // pre-k row, and the person's request as the first message, recorded as theirs.
+  start: procedure
+    .input(
+      z.object({
+        // Optional for a coordinator agent: its own project is used.
+        projectId: z.string().min(1).optional(),
+        title: z.string().trim().min(1).max(120),
+        request: z.string().trim().min(1),
+        requestedBy: z.string().trim().min(1),
+      }),
+    )
+    .errors({
+      NO_PROJECT: z.object({}),
+      FORBIDDEN_FOR_THREADS: z.object({ threadId: z.string() }),
+      WORKSPACE_FAILED: z.object({ code: z.string(), message: z.string() }),
+      AGENT_START_FAILED: z.object({ message: z.string() }),
+    })
     .tool()
     .cli()
-    .handler(async ({ input, collections, rpc }) => {
+    .handler(async ({ input, caller, collections, rpc, fail }) => {
+      // A thread pre-k started can't start more threads; only the coordinator, windows and the CLI can.
+      const own = callerThread(caller);
+      if (own && collections.get("threads", own)) return fail("FORBIDDEN_FOR_THREADS", { threadId: own });
+
+      const projectId = await projectFor(input.projectId, caller, rpc);
+      if (!projectId) return fail("NO_PROJECT", {});
+
+      const ws = await rpc.call("workspaces.prepare", { projectId, title: input.title });
+      let workspace: z.infer<typeof prepared> | undefined;
+      if (ws.ok) workspace = prepared.parse(ws.value);
+      else if (ws.failure.code !== "NO_REPO")
+        // A project with no repo still gets a thread (no worktree); anything else stops here.
+        return fail("WORKSPACE_FAILED", { code: ws.failure.code, message: messageOf(ws.failure) });
+
+      const release = async () => {
+        if (workspace) await rpc.call("workspaces.release", { worktree: workspace.worktree }).catch(() => undefined);
+      };
+      const started = await rpc.call("agents.start", {
+        agent: THREAD_AGENT,
+        ...(workspace ? { cwd: workspace.worktree } : {}),
+      });
+      const threadId = started.ok ? z.string().safeParse(started.value) : undefined;
+      if (!started.ok || !threadId?.success) {
+        await release();
+        return fail("AGENT_START_FAILED", { message: started.ok ? "agents.start answered no thread id" : messageOf(started.failure) });
+      }
+
+      const now = Date.now();
+      await collections.upsert("threads", [
+        {
+          threadId: threadId.data,
+          projectId,
+          title: input.title,
+          request: input.request,
+          requestedBy: input.requestedBy,
+          ...(workspace ? { repo: workspace.repo, baseBranch: workspace.baseBranch, branch: workspace.branch, worktree: workspace.worktree } : {}),
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+
+      // The thread stays even if the first message fails (no key, no harness): its transcript shows the error and the
+      // person can retry from the thread.
+      const sent = await rpc.call("agents.send", {
+        threadId: threadId.data,
+        text: input.request,
+        turn: "queue",
+        by: input.requestedBy,
+      });
+      const r = sent.ok ? receipt.safeParse(sent.value) : undefined;
+      return {
+        threadId: threadId.data,
+        branch: workspace?.branch,
+        firstMessage: r?.success ? r.data : ("failed" as const),
+      };
+    }),
+
+  list: procedure
+    // Optional for a coordinator agent, like start.
+    .input(z.object({ projectId: z.string().min(1).optional() }))
+    .output(z.array(listed))
+    .errors({ NO_PROJECT: z.object({}) })
+    .tool()
+    .cli()
+    .handler(async ({ input, caller, collections, rpc, fail }) => {
+      const projectId = await projectFor(input.projectId, caller, rpc);
+      if (!projectId) return fail("NO_PROJECT", {});
       // Point's live status. If the agents daemon is down the threads still list, as idle or review_ready.
       const live = await rpc.call("agents.threads", undefined).catch(() => undefined);
       const parsed = live?.ok ? pointThreads.safeParse(live.value) : undefined;
@@ -41,7 +156,7 @@ export default defineRouter({
       const outputs = collections.all("thread-outputs");
       return collections
         .all("threads")
-        .filter((t) => t.projectId === input.projectId)
+        .filter((t) => t.projectId === projectId)
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .map((t) => {
           const mine = outputs
