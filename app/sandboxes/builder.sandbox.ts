@@ -7,6 +7,7 @@ import { defineSandbox } from "point/app";
 export default defineSandbox({
   provider: "local",
   read: "workspace",
-  readAllow: ["/opt/homebrew", "~/.nvm", "~/.local/share/pnpm", "~/Library/pnpm", "~/.local/share/vite-plus"],
+  // Toolchains under home: bun (pre-k and most repos it works on), nvm, pnpm (Point and pnpm repos), vite-plus.
+  readAllow: ["/opt/homebrew", "~/.bun", "~/.nvm", "~/.local/share/pnpm", "~/Library/pnpm", "~/.local/share/vite-plus"],
   network: { allow: ["*.anthropic.com", "*.openai.com", "*.chatgpt.com", "registry.npmjs.org"] },
 });
