@@ -22,7 +22,7 @@ const messageOf = (f: unknown) => {
 
 /**
  * The project a call is about: the `projectId` it passed, else, for a coordinator agent, the project it coordinates
- * (Coordinator chat's `coordinators.projectOf`), so the coordinator never has to know its own id.
+ * (Coordinator chat's `coordinator.projectOf`), so the coordinator never has to know its own id.
  */
 async function projectFor(
   given: string | undefined,
@@ -32,7 +32,7 @@ async function projectFor(
   if (given) return given;
   const own = callerThread(caller);
   if (!own) return undefined;
-  const r = await rpc.call("coordinators.projectOf", { threadId: own }).catch(() => undefined);
+  const r = await rpc.call("coordinator.projectOf", { threadId: own }).catch(() => undefined);
   const id = r?.ok ? z.string().min(1).safeParse(r.value) : undefined;
   return id?.success ? id.data : undefined;
 }
@@ -92,8 +92,9 @@ export default defineRouter({
       const ws = await rpc.call("workspaces.prepare", { projectId, title: input.title });
       let workspace: z.infer<typeof prepared> | undefined;
       if (ws.ok) workspace = prepared.parse(ws.value);
-      else if (ws.failure.code !== "NO_REPO")
-        // A project with no repo still gets a thread (no worktree); anything else stops here.
+      else if (ws.failure.code !== "NO_REPO" && ws.failure.code !== "NOT_FOUND")
+        // A project with no repo still gets a thread (no worktree), and so does an app without the workspaces router
+        // yet (NOT_FOUND, until #12 lands). Anything else stops here.
         return fail("WORKSPACE_FAILED", { code: ws.failure.code, message: messageOf(ws.failure) });
 
       const release = async () => {

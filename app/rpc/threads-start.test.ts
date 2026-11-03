@@ -18,7 +18,7 @@ function fakeMain(answers: Record<string, Answer> = {}) {
     "workspaces.release": ok(undefined),
     "agents.start": ok("t1"),
     "agents.send": ok("delivered"),
-    "coordinators.projectOf": no("NOT_A_COORDINATOR"),
+    "coordinator.projectOf": no("NOT_A_COORDINATOR"),
   };
   const call = async (path: string, input: unknown) => {
     calls.push({ path, input });
@@ -51,12 +51,12 @@ describe("threads.start", () => {
   });
 
   it("uses the coordinator's own project when it passes none", async () => {
-    const main = fakeMain({ "coordinators.projectOf": ok("p7") });
+    const main = fakeMain({ "coordinator.projectOf": ok("p7") });
     const { rpc, collections } = client("agent:coordinator-7", main);
     const { projectId: _, ...rest } = input;
     const r = await rpc.start(rest);
     expect(r.ok).toBe(true);
-    expect(main.calls[0]).toEqual({ path: "coordinators.projectOf", input: { threadId: "coordinator-7" } });
+    expect(main.calls[0]).toEqual({ path: "coordinator.projectOf", input: { threadId: "coordinator-7" } });
     expect(collections.get("threads", "t1")?.projectId).toBe("p7");
   });
 
@@ -76,6 +76,13 @@ describe("threads.start", () => {
     expect(r.ok && r.value.branch).toBeUndefined();
     expect(main.calls.find((c) => c.path === "agents.start")?.input).toEqual({ agent: THREAD_AGENT });
     expect(collections.get("threads", "t1")?.worktree).toBeUndefined();
+  });
+
+  it("starts without a worktree while the app has no workspaces router", async () => {
+    const main = fakeMain({ "workspaces.prepare": no("NOT_FOUND") });
+    const r = await client("window:main", main).rpc.start(input);
+    expect(r.ok && r.value.firstMessage).toBe("delivered");
+    expect(main.calls.find((c) => c.path === "agents.start")?.input).toEqual({ agent: THREAD_AGENT });
   });
 
   it("stops before starting an agent when the workspace can't be prepared", async () => {
