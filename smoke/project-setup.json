@@ -1,0 +1,16 @@
+[
+  { "waitText": "Start your first project" },
+  { "type": "Repository", "text": "https://github.com/acme/test-repo" },
+  { "click": "Create project" },
+  { "waitText": "acme/test-repo · main" },
+  { "click": "New project" },
+  { "type": "Name", "text": "Scratch" },
+  { "click": "Create project" },
+  { "waitText": "No repository linked" },
+  { "click": "Project settings" },
+  { "type": "Repository", "text": "acme/test-repo" },
+  { "click": "Link" },
+  { "waitText": "threads branch from main" },
+  { "relaunch": true },
+  { "waitText": "Scratch" }
+]

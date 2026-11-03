@@ -37,5 +37,15 @@
     "login": "pre-k-agent",
     "name": null,
     "url": "https://github.com/pre-k-agent"
+  },
+  "getChecks": {
+    "state": "success",
+    "checks": [
+      {
+        "name": "verify",
+        "state": "success",
+        "url": null
+      }
+    ]
   }
 }

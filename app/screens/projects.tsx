@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { rpc, useCollection } from "point/client";
+import { rpc, useCollection, useConnectors } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
+import { linkFailure, repoFromInput } from "../projects/messages";
 import type { Project, ProjectChange } from "../schemas/project";
+import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Disclosure } from "../ui/Disclosure";
 import { Field } from "../ui/Field";
@@ -15,6 +17,16 @@ import { TextArea } from "../ui/TextArea";
 import { TextField } from "../ui/TextField";
 
 
+type LinkResult = { ok: true } | { ok: false; message: string };
+
+// Links `text` (owner/name or a GitHub link) to the project: pre-k checks the token can see it and clones it.
+async function linkRepo(projectId: string, text: string): Promise<LinkResult> {
+  const repo = repoFromInput(text);
+  const r = await rpc.github.linkRepo({ projectId, repo });
+
+  return r.ok ? { ok: true } : { ok: false, message: linkFailure(r.failure.code, r.failure.detail, repo) };
+}
+
 // Shows the first-run form until a project exists, then the open project (the most recently opened) with a switcher
 // and its settings above `children`.
 export function Projects({ children }: { children: (project: Project) => ReactNode }) {
@@ -23,18 +35,36 @@ export function Projects({ children }: { children: (project: Project) => ReactNo
     q.from({ p: projects }).orderBy(({ p }) => p.lastOpenedAt, "desc"),
   );
   const [adding, setAdding] = useState(false);
+  // A repo that couldn't be linked while creating: the project exists, and settings open on the Repository field.
+  const [unlinked, setUnlinked] = useState<{ projectId: string; repo: string; message: string }>();
 
   if (isLoading) return null;
 
   const current = data[0];
 
   if (!current || adding)
-    return <NewProject onDone={() => setAdding(false)} onCancel={current ? () => setAdding(false) : undefined} />;
+    return (
+      <NewProject
+        first={!current}
+        onDone={(failed) => {
+          setUnlinked(failed);
+          setAdding(false);
+        }}
+        onCancel={current ? () => setAdding(false) : undefined}
+      />
+    );
+
+  const notice = unlinked?.projectId === current.id ? unlinked : undefined;
 
   return (
     <Stack gap={16}>
       <Stack direction="row" gap={8} align="center" justify="between" wrap>
-        <Heading>{current.name}</Heading>
+        <Stack gap={4}>
+          <Heading>{current.name}</Heading>
+          <Text tone="muted">
+            {current.repo ? `${current.repo} · ${current.defaultBranch ?? "default branch"}` : "No repository linked"}
+          </Text>
+        </Stack>
         <Stack direction="row" gap={8} align="center">
           {data.length > 1 && (
             <Select
@@ -47,6 +77,12 @@ export function Projects({ children }: { children: (project: Project) => ReactNo
           <Button onClick={() => setAdding(true)}>New project</Button>
         </Stack>
       </Stack>
+      <Alert tone="attention" title={notice ? `Created ${current.name}, but ${notice.repo} isn't linked` : undefined}>
+        {notice?.message}
+      </Alert>
+      {notice && (
+        <RepositoryField key={current.id} project={current} initial={notice.repo} onLinked={() => setUnlinked(undefined)} />
+      )}
       <Disclosure summary="Project settings">
         <ProjectSettings key={current.id} project={current} />
       </Disclosure>
@@ -55,39 +91,70 @@ export function Projects({ children }: { children: (project: Project) => ReactNo
   );
 }
 
-function NewProject({ onDone, onCancel }: { onDone: () => void; onCancel?: (() => void) | undefined }) {
+function NewProject({
+  first,
+  onDone,
+  onCancel,
+}: {
+  first: boolean;
+  onDone: (unlinked?: { projectId: string; repo: string; message: string }) => void;
+  onCancel?: (() => void) | undefined;
+}) {
   const [name, setName] = useState("");
+  const [repo, setRepo] = useState("");
   const [instructions, setInstructions] = useState("");
   const [problem, setProblem] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  // With a repository and no name, the project takes the repository's name.
+  const repoName = repoFromInput(repo).split("/")[1] ?? "";
+  const finalName = name.trim() || repoName;
 
   return (
     <Stack gap={24} maxWidth={560}>
       <Stack gap={8}>
-        <Heading>New project</Heading>
+        <Heading>{first ? "Start your first project" : "New project"}</Heading>
         <Text tone="muted">
-          A project holds a repository, the instructions every agent follows, and the threads that do the work.
+          A project is one repository, the instructions every agent follows, and the threads that do the work. Ask for
+          something in the project chat and an agent works on it in the repository.
         </Text>
       </Stack>
       <form
         onSubmit={async (e) => {
           e.preventDefault();
-          const r = await rpc.projects.create({ name, instructions });
+          setBusy(true);
+          setProblem(undefined);
+          const created = await rpc.projects.create({ name: finalName, instructions });
 
-          if (r.ok) {
-            onDone();
-            document.querySelector("main")?.focus();
-          } else setProblem(r.failure.code);
+          if (!created.ok) {
+            setBusy(false);
+            setProblem(created.failure.code === "BAD_INPUT" ? "A project needs a name." : `Couldn't create it (${created.failure.code}).`);
+            return;
+          }
+          const linked = repo.trim() ? await linkRepo(created.value.id, repo) : { ok: true as const };
+
+          setBusy(false);
+          onDone(linked.ok ? undefined : { projectId: created.value.id, repo: repoFromInput(repo), message: linked.message });
+          document.querySelector("main")?.focus();
         }}
       >
         <Stack gap={16}>
-          <Field label="Name" error={problem}>
-            <TextField autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+          <Field label="Repository" hint="owner/name or a GitHub link. pre-k clones it once; each thread works on its own branch.">
+            <TextField
+              autoFocus
+              value={repo}
+              placeholder="buildwf/pre-k"
+              onChange={(e) => setRepo(e.target.value)}
+            />
           </Field>
-          <Field label="Instructions" hint="Every agent in this project reads these first. You can change them later.">
+          <GitHubStatus />
+          <Field label="Name" error={problem}>
+            <TextField value={name} placeholder={repoName || "My project"} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="Instructions" hint="Every agent in this project reads these before it starts. You can change them later.">
             <TextArea
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
-              placeholder="Use pnpm. Keep pull requests small."
+              placeholder="Use bun. Run bun run verify before landing a change."
             />
           </Field>
           <Stack direction="row" gap={8} justify="end">
@@ -96,13 +163,27 @@ function NewProject({ onDone, onCancel }: { onDone: () => void; onCancel?: (() =
                 Cancel
               </Button>
             )}
-            <Button variant="primary" type="submit" disabled={!name.trim()}>
-              Create project
+            <Button variant="primary" type="submit" disabled={busy || !finalName}>
+              {busy ? (repo.trim() ? "Linking repository…" : "Creating…") : "Create project"}
             </Button>
           </Stack>
         </Stack>
       </form>
     </Stack>
+  );
+}
+
+// Whether pre-k can reach GitHub, and how to set it up when it can't. Shows nothing once it can.
+function GitHubStatus() {
+  const { connectors } = useConnectors();
+  const github = connectors?.find((c) => c.name === "github");
+
+  if (!github || github.connected) return null;
+
+  return (
+    <Alert tone="attention" title="GitHub isn't connected">
+      {github.help}
+    </Alert>
   );
 }
 
@@ -116,11 +197,12 @@ function ProjectSettings({ project }: { project: Project }) {
   const save = async (change: Omit<ProjectChange, "id">) => {
     const r = await rpc.projects.update({ id: project.id, ...change });
 
-    setStatus(r.ok ? "Saved" : r.failure.code === "BAD_INPUT" ? "A project needs a name" : r.failure.code);
+    setStatus(r.ok ? "Saved" : r.failure.code === "BAD_INPUT" ? "A project needs a name." : `Not saved (${r.failure.code}).`);
   };
 
   return (
     <Stack gap={16} padding={8}>
+      <Repository project={project} />
       <Field label="Name">
         <TextField
           value={name ?? project.name}
@@ -146,6 +228,82 @@ function ProjectSettings({ project }: { project: Project }) {
       </Text>
       <Memory projectId={project.id} />
     </Stack>
+  );
+}
+
+// The linked repository, with Change; or the field to link one.
+function Repository({ project }: { project: Project }) {
+  const [changing, setChanging] = useState(false);
+
+  if (!project.repo || changing)
+    return (
+      <RepositoryField
+        project={project}
+        initial={project.repo ?? ""}
+        onLinked={() => setChanging(false)}
+        onCancel={project.repo ? () => setChanging(false) : undefined}
+      />
+    );
+
+  return (
+    <Stack gap={4}>
+      <Text bold>Repository</Text>
+      <Stack direction="row" gap={8} align="center" justify="between">
+        <Text>
+          {project.repo} · threads branch from {project.defaultBranch ?? "the default branch"}
+        </Text>
+        <Button variant="quiet" onClick={() => setChanging(true)}>
+          Change
+        </Button>
+      </Stack>
+    </Stack>
+  );
+}
+
+function RepositoryField({
+  project,
+  initial,
+  onLinked,
+  onCancel,
+}: {
+  project: Project;
+  initial: string;
+  onLinked: () => void;
+  onCancel?: (() => void) | undefined;
+}) {
+  const [text, setText] = useState(initial);
+  const [problem, setProblem] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        const r = await linkRepo(project.id, text);
+
+        setBusy(false);
+        setProblem(r.ok ? undefined : r.message);
+        if (r.ok) onLinked();
+      }}
+    >
+      <Stack gap={8}>
+        <Stack direction="row" gap={8} align="end">
+          <Field label="Repository" wide error={problem} hint={problem ? undefined : "owner/name or a GitHub link."}>
+            <TextField value={text} placeholder="buildwf/pre-k" onChange={(e) => setText(e.target.value)} />
+          </Field>
+          {onCancel && (
+            <Button type="button" variant="quiet" onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
+          <Button type="submit" disabled={busy || !text.trim()}>
+            {busy ? "Linking…" : "Link"}
+          </Button>
+        </Stack>
+        <GitHubStatus />
+      </Stack>
+    </form>
   );
 }
 

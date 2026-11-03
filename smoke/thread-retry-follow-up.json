@@ -1,0 +1,16 @@
+[
+  { "call": "projects.create", "input": { "id": "badges", "name": "Badges" } },
+  { "call": "projects.open", "input": { "id": "badges" } },
+  { "call": "threads.start", "input": { "projectId": "badges", "title": "Add a README badge", "request": "Add a README badge", "requestedBy": "Zack" } },
+  { "waitText": "Add a README badge" },
+  { "click": "Open" },
+  { "waitText": "attempt failed" },
+  { "waitText": "The harness lost its connection" },
+  { "click": "Retry" },
+  { "waitText": "Added the README badge and committed it." },
+  { "click": "Mark done" },
+  { "waitText": "Marked done. A follow-up reopens it." },
+  { "type": "Message the thread", "text": "Also add a license badge" },
+  { "click": "Follow up" },
+  { "waitText": "Added a license badge too." }
+]

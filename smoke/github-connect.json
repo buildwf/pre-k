@@ -1,0 +1,9 @@
+[
+  { "type": "Name", "text": "Demo" },
+  { "click": "Create project" },
+  { "waitText": "Connected as" },
+  { "waitText": "zack" },
+  { "type": "Repository", "text": "buildwf/pre-k-playground" },
+  { "click": "Link" },
+  { "waitText": "Threads land on buildwf/pre-k-playground's main" }
+]

@@ -4,7 +4,7 @@ import { ThreadPullRequest } from "../lib/ThreadPullRequest";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { Heading } from "../ui/Heading";
-import { LandedCommitCard } from "../ui/LandedCommitCard";
+import { ThreadLandedCommit } from "../lib/ThreadLandedCommit";
 import { Stack } from "../ui/Stack";
 import { Text } from "../ui/Text";
 
@@ -37,7 +37,7 @@ export function Delivered({ projectId, onOpen }: { projectId: string; onOpen: (t
               </Button>
             </Stack>
             {o.kind === "commit" ? (
-              <LandedCommitCard repo={o.repo} branch={o.branch} sha={o.sha} title={o.title} />
+              <ThreadLandedCommit repo={o.repo} branch={o.branch} sha={o.sha} title={o.title} />
             ) : (
               <ThreadPullRequest repo={o.repo} number={o.number} />
             )}

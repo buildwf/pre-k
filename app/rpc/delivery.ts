@@ -1,7 +1,7 @@
 import { defineRouter, procedure } from "point/app";
 import { connect, ConnectorError } from "point/connectors";
 import github from "../connectors/github.connector";
-import { PullRequestCardData, PullRequestRef } from "../schemas/delivery";
+import { ChecksRef, ChecksSummary, PullRequestCardData, PullRequestRef } from "../schemas/delivery";
 
 // Review and delivery: what a thread produced, read live from GitHub. Window-only (no .tool()): the card shows
 // GitHub's answer, never what an agent claims about its PR.
@@ -31,6 +31,24 @@ export default defineRouter({
         };
       } catch (e) {
         if (e instanceof ConnectorError && e.status === 404) return fail("NOT_FOUND", input);
+        throw e;
+      }
+    }),
+
+  // The checks on a landed commit (#4): Point's getChecks, rolled up to pending, success, failure or none.
+  checks: procedure
+    .input(ChecksRef)
+    .output(ChecksSummary)
+    .errors({ NOT_FOUND: ChecksRef })
+    .handler(async ({ input, connectors, fail }) => {
+      const client = connect(github, { token: await connectors.require("github") });
+
+      try {
+        const r = await client.getChecks(input);
+
+        return { state: r.state, checks: r.checks.map((c) => ({ name: c.name, state: c.state, url: c.url ?? undefined })) };
+      } catch (e) {
+        if (e instanceof ConnectorError && (e.status === 404 || e.status === 422)) return fail("NOT_FOUND", input);
         throw e;
       }
     }),
