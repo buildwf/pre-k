@@ -27,16 +27,24 @@ export function sh(s: string): string {
 
 /** A short title from a request: its first line, without a trailing period, at most 60 characters. */
 export function titleOf(request: string): string {
-  const line = (request.trim().split("\n")[0] ?? "").replace(/[.!]+$/, "").trim();
+  const line = (request.trim().split("\n")[0] ?? "")
+    .replace(/[.!]+$/, "")
+    .trim();
 
-  return line.length > 60 ? `${line.slice(0, 59).trimEnd()}…` : line || "Untitled request";
+  return line.length > 60
+    ? `${line.slice(0, 59).trimEnd()}…`
+    : line || "Untitled request";
 }
 
 /** The file a request names (`docs/setup.md`), or README.md. Only relative paths inside the worktree. */
 export function targetFileOf(request: string): string {
-  const named = request.match(/(?:^|\s)([\w-][\w./-]*\.[A-Za-z0-9]+)(?=[\s,.;:!?]|$)/)?.[1];
+  const named = request.match(
+    /(?:^|\s)([\w-][\w./-]*\.[A-Za-z0-9]+)(?=[\s,.;:!?]|$)/,
+  )?.[1];
 
-  return named && !named.includes("..") && !named.startsWith("/") ? named : "README.md";
+  return named && !named.includes("..") && !named.startsWith("/")
+    ? named
+    : "README.md";
 }
 
 /** The `url` field of a `--json` CLI reply, if it has one. */
@@ -44,7 +52,8 @@ export function urlOf(output: string): string | undefined {
   try {
     const v: unknown = JSON.parse(output);
 
-    if (v && typeof v === "object" && "url" in v && typeof v.url === "string") return v.url;
+    if (v && typeof v === "object" && "url" in v && typeof v.url === "string")
+      return v.url;
   } catch {
     // not JSON: fall through to a bare URL in the text
   }
@@ -77,6 +86,9 @@ export function scriptedSession(
   let closed = false;
   let slowAt = 0;
   const steers: string[] = [];
+  // The command running now, so Pause, Cancel and Stop kill it rather than let a commit or PR open finish afterwards.
+  let active: { kill(): void; done: Promise<number> } | undefined;
+  let current: Promise<void> = Promise.resolve();
 
   const run = async (script: string) => {
     const p = await o.spawn("sh", ["-c", script]);
@@ -84,8 +96,13 @@ export function scriptedSession(
     // corrupt the JSON a command prints. It joins the output only when the command failed.
     let out = "";
     let err = "";
-    p.onLine((l) => (l.startsWith("\u0000") ? (err += `${l.slice(1)}\n`) : (out += `${l}\n`)));
-    const code = await new Promise<number>((r) => p.onExit((c) => r(c ?? 1)));
+    p.onLine((l) =>
+      l.startsWith("\u0000") ? (err += `${l.slice(1)}\n`) : (out += `${l}\n`),
+    );
+    const done = new Promise<number>((r) => p.onExit((c) => r(c ?? 1)));
+    active = { kill: () => p.kill(), done };
+    const code = await done;
+    active = undefined;
 
     return { code, out: (code === 0 ? out : `${out}${err}`).trim() };
   };
@@ -110,12 +127,24 @@ export function scriptedSession(
         if (t.stopped()) return { code: 130, out: "stopped" };
 
         const itemId = randomUUID();
-        o.onEvent({ type: "tool.start", itemId, name: "Bash", input: { command } });
-        const r = await run(`cd ${sh(o.cwd)} && ${command}`).catch((e: unknown) => ({
-          code: 1,
-          out: e instanceof Error ? e.message : String(e),
-        }));
-        o.onEvent({ type: "tool.end", itemId, output: r.out, isError: r.code !== 0 });
+        o.onEvent({
+          type: "tool.start",
+          itemId,
+          name: "Bash",
+          input: { command },
+        });
+        const r = await run(`cd ${sh(o.cwd)} && ${command}`).catch(
+          (e: unknown) => ({
+            code: 1,
+            out: e instanceof Error ? e.message : String(e),
+          }),
+        );
+        o.onEvent({
+          type: "tool.end",
+          itemId,
+          output: r.out,
+          isError: r.code !== 0,
+        });
 
         return r;
       },
@@ -124,11 +153,22 @@ export function scriptedSession(
 
         for (; i <= 10 && !t.stopped(); i++) {
           const itemId = randomUUID();
-          o.onEvent({ type: "tool.start", itemId, name: "Read", input: { step: i } });
+          o.onEvent({
+            type: "tool.start",
+            itemId,
+            name: "Read",
+            input: { step: i },
+          });
           await new Promise((r) => setTimeout(r, stepMs));
-          o.onEvent({ type: "tool.end", itemId, output: `step ${i} done`, isError: false });
+          o.onEvent({
+            type: "tool.end",
+            itemId,
+            output: `step ${i} done`,
+            isError: false,
+          });
 
-          while (steers.length) await t.say(`Steered: “${steers.shift()}”. Adjusting course.`);
+          while (steers.length)
+            await t.say(`Steered: “${steers.shift()}”. Adjusting course.`);
         }
 
         slowAt = i <= 10 ? i : 0;
@@ -142,14 +182,18 @@ export function scriptedSession(
 
       if (cmd === "/fail") throw new Error("scripted failure");
 
-      if (cmd === "/slow" || (text.startsWith(RESUME) && slowAt > 0)) await t.slow();
+      if (cmd === "/slow" || (text.startsWith(RESUME) && slowAt > 0))
+        await t.slow();
       else await play(t);
 
       o.onEvent({ type: "usage", inputTokens: 0, outputTokens: 0, costUsd: 0 });
 
       if (interrupted) status = "interrupted";
     } catch (e) {
-      o.onEvent({ type: "error", message: e instanceof Error ? e.message : String(e) });
+      o.onEvent({
+        type: "error",
+        message: e instanceof Error ? e.message : String(e),
+      });
       status = "failed";
     } finally {
       // Always end the turn, or Point shows the thread running forever and treats new messages as steers.
@@ -164,19 +208,24 @@ export function scriptedSession(
     async send(text, mode) {
       if (mode === "steer" && busy) return (steers.push(text), "delivered");
 
-      void turn(text);
+      current = turn(text);
 
       return "delivered";
     },
     async interrupt() {
       interrupted = true;
+      const running = active;
+      running?.kill();
+      await running?.done;
     },
     close() {
       if (closed) return;
 
       closed = true;
       interrupted = true;
-      o.onEvent({ type: "exit", code: 0 });
+      active?.kill();
+      // Report exit once the turn has ended, so no tool or turn event follows it.
+      void current.then(() => o.onEvent({ type: "exit", code: 0 }));
     },
   };
 }
@@ -195,20 +244,30 @@ export async function builderTurn(t: Turn): Promise<void> {
 
   if (edit.code !== 0) throw new Error(`could not edit ${file}: ${edit.out}`);
 
-  const commit = await t.bash(`git add -A && git commit -q -m ${sh(title)} && git rev-parse --short HEAD`);
+  const commit = await t.bash(
+    `git add -A && git commit -q -m ${sh(title)} && git rev-parse --short HEAD`,
+  );
 
   if (commit.code !== 0) throw new Error(`could not commit: ${commit.out}`);
 
   if (t.stopped()) return;
 
+  // `exec` so the PR command is the process Cancel kills, not a shell that would leave it running.
   const pr = await t.bash(
-    commands.openPullRequest(title, `${request}\n\nMade by pre-k's scripted builder (no model).`),
+    "exec " +
+      commands.openPullRequest(
+        title,
+        `${request}\n\nMade by pre-k's scripted builder (no model).`,
+      ),
   );
 
-  if (pr.code !== 0) throw new Error(`could not open the pull request: ${pr.out}`);
+  if (pr.code !== 0)
+    throw new Error(`could not open the pull request: ${pr.out}`);
 
   const url = urlOf(pr.out);
-  await t.say(url ? `Opened a pull request: ${url}` : `Opened a pull request.\n${pr.out}`);
+  await t.say(
+    url ? `Opened a pull request: ${url}` : `Opened a pull request.\n${pr.out}`,
+  );
 }
 
 /** The coordinator's turn: a question gets a short answer; anything else becomes a thread. */
@@ -216,15 +275,18 @@ export async function coordinatorTurn(t: Turn): Promise<void> {
   const request = t.text.trim();
 
   if (request.endsWith("?")) {
-    await t.say("I'm the scripted coordinator, so I can't answer questions. Ask me to change something and I'll start a thread for it.");
+    await t.say(
+      "I'm the scripted coordinator, so I can't answer questions. Ask me to change something and I'll start a thread for it.",
+    );
 
     return;
   }
 
   const title = titleOf(request);
-  const started = await t.bash(commands.startThread(title, request));
+  const started = await t.bash(`exec ${commands.startThread(title, request)}`);
 
-  if (started.code !== 0) throw new Error(`could not start a thread: ${started.out}`);
+  if (started.code !== 0)
+    throw new Error(`could not start a thread: ${started.out}`);
 
   await t.say(`Started a thread for “${title}”.`);
 }
