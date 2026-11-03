@@ -2,7 +2,7 @@ import { defineRouter, procedure } from "point/app";
 import { connect, ConnectorError } from "point/connectors";
 import { z } from "zod";
 import github from "../connectors/github.connector";
-import { ensureClone, GitError, publishBranch } from "../lib/checkout";
+import { ensureClone, GitError, landOnBase, publishBranch } from "../lib/checkout";
 import { checkoutPath, remoteUrl } from "../lib/paths";
 import { newPullRequest, repoName } from "../schemas/github";
 import { linkedRepo } from "../schemas/workspace";
@@ -71,6 +71,71 @@ export default defineRouter({
       if (!updated.ok) return fail("NO_PROJECT", { projectId: input.projectId });
 
       return { repo: found.repo, defaultBranch: found.defaultBranch, checkoutPath: dir };
+    }),
+
+  /**
+   * A thread's agent lands its work straight on the repo's default branch, no PR (Zack, 2026-11-03):
+   * `"$POINT_CLI" github landOnMain --message "..."`. Like openPullRequest, main does the git work with the token and
+   * takes the repo, branch and base from the thread's record, never from the input.
+   */
+  landOnMain: procedure
+    .input(z.object({ message: z.string().trim().min(1).max(256).optional() }))
+    .output(z.object({ sha: z.string(), url: z.string() }))
+    .errors({
+      NOT_A_THREAD: z.object({}),
+      NO_CHANGES: z.object({ message: z.string() }),
+      CONFLICT: z.object({ message: z.string() }),
+      NOT_FAST_FORWARD: z.object({ message: z.string() }),
+      PUSH_REJECTED: z.object({ message: z.string() }),
+    })
+    .tool()
+    .cli()
+    .handler(async ({ input, caller, collections, connectors, rpc, fail }) => {
+      const threadId = callerThread(caller);
+      const thread = threadId ? collections.get("threads", threadId) : undefined;
+
+      if (!threadId || !thread?.repo || !thread.branch || !thread.baseBranch || !thread.worktree)
+        return fail("NOT_A_THREAD", {});
+      const token = await connectors.require("github");
+      const message = input.message ?? thread.title;
+      const login = (await connect(github, { token }).me({})).login;
+      const landed = await landOnBase({
+        worktree: thread.worktree,
+        branch: thread.branch,
+        base: thread.baseBranch,
+        message,
+        author: { name: "pre-k agent", email: `${login}@users.noreply.github.com` },
+        token,
+      });
+
+      if (landed.ok) {
+        const url = `https://github.com/${thread.repo}/commit/${landed.sha}`;
+
+        // Recorded as the thread's output once Threads' commit kind exists; the commit is on GitHub either way.
+        await rpc
+          .call("threads.report", {
+            threadId,
+            kind: "commit",
+            repo: thread.repo,
+            sha: landed.sha,
+            branch: thread.baseBranch,
+            url,
+            title: message,
+          })
+          .catch(() => undefined);
+
+        return { sha: landed.sha, url };
+      }
+      switch (landed.reason) {
+        case "no-changes":
+          return fail("NO_CHANGES", { message: landed.detail });
+        case "conflict":
+          return fail("CONFLICT", { message: landed.detail });
+        case "not-fast-forward":
+          return fail("NOT_FAST_FORWARD", { message: landed.detail });
+        case "rejected":
+          return fail("PUSH_REJECTED", { message: landed.detail });
+      }
     }),
 
   /**
