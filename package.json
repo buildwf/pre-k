@@ -14,10 +14,11 @@
     "lint": "point check",
     "check": "point check",
     "live": "scripts/live.sh",
-    "verify": "bun run lint && bun run test && point build --no-package",
+    "verify": "bun run lint && bun run test && bun run tour",
     "storybook": "storybook dev -p 6006 --exact-port --no-open",
     "build-storybook": "storybook build",
-    "smoke:delivery": "sh scripts/smoke-delivery.sh"
+    "smoke:delivery": "sh scripts/smoke-delivery.sh",
+    "tour": "sh scripts/tour.sh"
   },
   "dependencies": {
     "point": "link:../cloudflare-point",
