@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { LandedCommitCard } from "../../ui/LandedCommitCard";
 import { rpc, useAgent, useCollection, useThreads } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../../.point/components";
 import { ThreadPullRequest } from "../../lib/ThreadPullRequest";
 import { UPDATE_PREFIX } from "../../threads/relay";
 import { startedThread } from "../../threads/started";
-import { outputLabel, threadState } from "../../threads/state";
+import { threadState } from "../../threads/state";
 import { ApprovalPrompt } from "../../ui/ApprovalPrompt";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
@@ -214,9 +215,7 @@ function StartedThread({
           o.kind === "pr" ? (
             <ThreadPullRequest key={o.id} repo={o.repo} number={o.number} />
           ) : (
-            <Text key={o.id} tone="muted" mono>
-              Landed on {o.branch}: {o.title ?? outputLabel(o)}
-            </Text>
+            <LandedCommitCard key={o.id} repo={o.repo} branch={o.branch} sha={o.sha} title={o.title} />
           ),
         )}
       </Stack>

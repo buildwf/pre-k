@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { LandedCommitCard } from "../ui/LandedCommitCard";
 import { z } from "zod";
 import { rpc, useAgent, useCollection, useThreads } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../.point/components";
 import { ThreadPullRequest } from "../lib/ThreadPullRequest";
-import { outputLabel, threadState, type ThreadState } from "../threads/state";
+import { threadState, type ThreadState } from "../threads/state";
 import { ApprovalPrompt } from "../ui/ApprovalPrompt";
 import { Button } from "../ui/Button";
 import { Disclosure } from "../ui/Disclosure";
@@ -188,9 +189,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
         o.kind === "pr" ? (
           <ThreadPullRequest key={o.id} repo={o.repo} number={o.number} />
         ) : (
-          <Text key={o.id} tone="muted" mono>
-            Landed on {o.branch}: {o.title ?? outputLabel(o)}
-          </Text>
+          <LandedCommitCard key={o.id} repo={o.repo} branch={o.branch} sha={o.sha} title={o.title} />
         ),
       )}
       <ApprovalPrompt pending={agent.pending} onDecide={agent.approve} />
