@@ -155,7 +155,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
         </Stack>
       </Stack>
       <Text tone="muted">
-        {agent.status}
+        {agent.status} · ${agent.usage.costUsd.toFixed(3)}
         {row?.requestedBy ? ` · asked by ${row.requestedBy}` : ""}
         {row?.branch ? ` · ${row.branch}` : ""}
       </Text>

@@ -44,9 +44,31 @@ export function tokenEnv(token: string | null, origin = "https://github.com/"): 
   };
 }
 
+/**
+ * main runs git in worktrees an agent wrote to, sometimes with the token in its environment, and their config is the
+ * checkout's, which an agent could edit. These `-c` flags win over any file config: no hooks, no fsmonitor command, no
+ * credential helper or askpass, no ssh command, and the proxy pinned to the one main's own environment names (empty
+ * means none), so a planted `http.proxy` or `remote.origin.proxy` can't route the token elsewhere. Point's
+ * rpc.agents.push (#696, #719) does the same once pre-k's pin moves past it.
+ */
+function hardened(): string[] {
+  const proxy = process.env.HTTPS_PROXY ?? process.env.https_proxy ?? process.env.ALL_PROXY ?? process.env.all_proxy ?? "";
+
+  return [
+    "core.hooksPath=/dev/null",
+    "core.fsmonitor=false",
+    "credential.helper=",
+    "core.askPass=",
+    "core.sshCommand=false",
+    `http.proxy=${proxy}`,
+    `http.https://github.com/.proxy=${proxy}`,
+    `remote.origin.proxy=${proxy}`,
+  ].flatMap((c) => ["-c", c]);
+}
+
 async function git(cwd: string, args: string[], token: string | null = null): Promise<string> {
   try {
-    const r = await run("git", args, { cwd, env: tokenEnv(token), maxBuffer: 16 * 1024 * 1024 });
+    const r = await run("git", [...hardened(), ...args], { cwd, env: tokenEnv(token), maxBuffer: 16 * 1024 * 1024 });
 
     return r.stdout.trim();
   } catch (e) {
@@ -191,13 +213,15 @@ export async function publishBranch(o: {
 
 export type LandResult =
   | { ok: true; sha: string }
-  | { ok: false; reason: "no-changes" | "conflict" | "not-fast-forward" | "rejected"; detail: string };
+  | { ok: false; reason: "conflict"; detail: string; files: string[] }
+  | { ok: false; reason: "no-changes" | "not-fast-forward" | "rejected"; detail: string };
 
 /**
  * Land a thread's work straight on `base` (no PR): commit anything uncommitted as `message`, fetch, rebase the
- * thread's branch onto `origin/<base>`, and push HEAD to `base`. Never forced: when someone pushed in between, the push
- * is refused (`not-fast-forward`) and calling again rebases onto the new tip. A rebase conflict is aborted, leaving the
- * worktree as it was, and reported.
+ * thread's branch onto `origin/<base>`, and push HEAD to `base`. Never forced. When someone pushes in between, it
+ * fetches and rebases once more before giving up with `not-fast-forward`. A rebase conflict is aborted, leaving the
+ * worktree as it was, and names the files: `origin/<base>` is already fetched into the shared clone, so the agent can
+ * `git rebase origin/<base>` in its worktree with no network, resolve them, and land again.
  */
 export async function landOnBase(o: {
   worktree: string;
@@ -213,37 +237,47 @@ export async function landOnBase(o: {
     return { ok: false, reason: "rejected", detail: `the worktree is on ${current}, not ${o.branch}` };
 
   await commitLeftovers(o.worktree, o.message, o.author);
-  await git(o.worktree, ["fetch", "--quiet", "origin", o.base], o.token);
 
-  try {
-    await git(o.worktree, [
-      "-c",
-      `user.name=${o.author.name}`,
-      "-c",
-      `user.email=${o.author.email}`,
-      "rebase",
-      "--quiet",
-      `origin/${o.base}`,
-    ]);
-  } catch (e) {
-    if (!(e instanceof GitError)) throw e;
-    await git(o.worktree, ["rebase", "--abort"]).catch(() => undefined);
+  for (let attempt = 0; ; attempt++) {
+    await git(o.worktree, ["fetch", "--quiet", "origin", o.base], o.token);
 
-    return { ok: false, reason: "conflict", detail: e.message };
+    try {
+      await git(o.worktree, [
+        "-c",
+        `user.name=${o.author.name}`,
+        "-c",
+        `user.email=${o.author.email}`,
+        "rebase",
+        "--quiet",
+        `origin/${o.base}`,
+      ]);
+    } catch (e) {
+      if (!(e instanceof GitError)) throw e;
+      const files = (await git(o.worktree, ["diff", "--name-only", "--diff-filter=U"]).catch(() => ""))
+        .split("\n")
+        .filter(Boolean);
+
+      await git(o.worktree, ["rebase", "--abort"]).catch(() => undefined);
+
+      return { ok: false, reason: "conflict", detail: e.message, files };
+    }
+
+    if ((await ahead(o.worktree, o.base)) === 0)
+      return { ok: false, reason: "no-changes", detail: `${o.branch} has nothing that ${o.base} doesn't` };
+
+    try {
+      await git(o.worktree, ["push", "--quiet", "origin", `HEAD:refs/heads/${o.base}`], o.token);
+
+      return { ok: true, sha: await git(o.worktree, ["rev-parse", "HEAD"]) };
+    } catch (e) {
+      if (!(e instanceof GitError)) throw e;
+      const raced = /non-fast-forward|fetch first|rejected/.test(e.stderr);
+
+      if (raced && attempt === 0) continue;
+
+      return raced
+        ? { ok: false, reason: "not-fast-forward", detail: e.message }
+        : { ok: false, reason: "rejected", detail: e.message };
+    }
   }
-
-  if ((await ahead(o.worktree, o.base)) === 0)
-    return { ok: false, reason: "no-changes", detail: `${o.branch} has nothing that ${o.base} doesn't` };
-
-  try {
-    await git(o.worktree, ["push", "--quiet", "origin", `HEAD:refs/heads/${o.base}`], o.token);
-  } catch (e) {
-    if (!(e instanceof GitError)) throw e;
-
-    return /non-fast-forward|fetch first|rejected/.test(e.stderr)
-      ? { ok: false, reason: "not-fast-forward", detail: e.message }
-      : { ok: false, reason: "rejected", detail: e.message };
-  }
-
-  return { ok: true, sha: await git(o.worktree, ["rev-parse", "HEAD"]) };
 }

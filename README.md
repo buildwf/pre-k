@@ -24,6 +24,20 @@ next to it if needed, installs, and opens the app. See the [UI tour](docs/ui-tou
 | Authority | Merging to `main`: yes. Deploy and spending: not granted. Dev apps stay closed (Zack, 2026-11-01): verify headless with `point smoke` and screenshots, never launch or focus a window on Zack's machine. |
 | Point gaps | File them as issues on `buildwf/cloudflare-point`; don't patch Point from pre-k. |
 
+## What a thread's builder may do without asking
+
+The sandbox is the guard, not per-call prompts (Zack, 2026-11-03: no ceremony). See `app/sandboxes/builder.sandbox.ts`.
+
+| Action | Policy | Why |
+|---|---|---|
+| Read, edit, run checks, `git commit`, `bun install` in its worktree | Runs without asking | The sandbox confines writes to the worktree and temp, and the network to the model APIs and npm. If Claude Code's own settings ask for a tool, pre-k shows Allow and Deny in the thread. |
+| Anything outside the worktree: other folders, userData, `~/.ssh`, the keychain, GitHub | Impossible, not asked | The sandbox has no path, host or credential for it. |
+| Land on `main` (`github landOnMain`) | Runs without asking, the only step that leaves the Mac | Zack chose no PRs. Main rebases and pushes with its token, never forced; a conflict or a newer `main` fails the call instead of overwriting. Undo is a revert on `main`. |
+| Opening PRs, force-pushing, deleting branches, deploying, spending beyond the model call | Not available to the builder | No tool exists for it. Adding one means deciding its approval here first. |
+
+Cost: the thread shows what its turns cost. On a `CLAUDE_CODE_OAUTH_TOKEN` that is Claude Code's estimate at API
+prices; your subscription is what's actually charged. On the gateway it is the metered cost.
+
 ## Domains
 
 Each has an owner thread in the pre-k project. Keep changes inside your domain's files and coordinate shared ones

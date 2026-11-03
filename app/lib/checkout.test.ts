@@ -135,3 +135,37 @@ describe("checkout", () => {
     expect(sh(bare, "log", "-1", "--format=%s", branch)).toBe("theirs");
   });
 });
+
+describe("hardening", () => {
+  const fake = fakeGitHub({ repos: [TEST_REPO] });
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pre-k-hooks-"));
+  const dir = path.join(root, "checkout");
+
+  afterAll(() => {
+    fake.cleanup();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("never runs a hook an agent planted, even one set by core.hooksPath or core.fsmonitor", async () => {
+    await ensureClone({ url: fake.remote(TEST_REPO.full_name), dir, token: null });
+    const wt = path.join(root, "wt");
+    const branch = "pre-k/hooked-0001";
+    const marker = path.join(root, "ran");
+    const hooks = path.join(root, "evil-hooks");
+
+    await addWorktree({ dir, base: "main", branch, worktree: wt });
+    fs.mkdirSync(hooks);
+    for (const hook of ["pre-commit", "pre-push", "post-commit"]) {
+      fs.writeFileSync(path.join(hooks, hook), `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 });
+      fs.writeFileSync(path.join(dir, ".git", "hooks", hook), `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 });
+    }
+    sh(wt, "config", "core.hooksPath", hooks);
+    sh(wt, "config", "core.fsmonitor", `touch ${marker}`);
+    fs.writeFileSync(path.join(wt, "X.md"), "x\n");
+
+    expect(
+      await publishBranch({ worktree: wt, branch, base: "main", message: "x", author, token: "secret-token" }),
+    ).toMatchObject({ ok: true });
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+});

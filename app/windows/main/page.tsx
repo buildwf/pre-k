@@ -3,6 +3,7 @@ import { z } from "zod";
 import { rpc, useAgent, useStore } from "point/client";
 import { render } from "../../../.point/components";
 import { persona, type Persona } from "../../schemas/persona";
+import { Delivered } from "../../screens/delivered";
 import { Projects } from "../../screens/projects";
 import { Threads } from "../../screens/threads";
 import { ApprovalPrompt } from "../../ui/ApprovalPrompt";
@@ -92,6 +93,7 @@ export default function Page() {
         </Disclosure>
         {problem && <Text tone="danger">{problem}</Text>}
         <Threads key={project.id} projectId={project.id} open={openThread} onOpen={setOpenThread} />
+        <Delivered key={`delivered-${project.id}`} projectId={project.id} onOpen={setOpenThread} />
         {threadId ? (
           <Chat threadId={threadId} />
         ) : (

@@ -16,7 +16,8 @@
     "live": "scripts/live.sh",
     "verify": "bun run lint && bun run test && point build --no-package",
     "storybook": "storybook dev -p 6006 --exact-port --no-open",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "smoke:delivery": "sh scripts/smoke-delivery.sh"
   },
   "dependencies": {
     "point": "link:../cloudflare-point",
