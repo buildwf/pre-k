@@ -1,0 +1,6 @@
+{
+  "getRepo": {
+    "repo": "acme/test-repo", "description": "A repo for pre-k's smoke runs", "private": false, "defaultBranch": "main",
+    "url": "https://github.com/acme/test-repo", "stars": 0, "openIssues": 0, "pushedAt": "2026-11-03T18:00:00Z"
+  }
+}
