@@ -1,0 +1,13 @@
+[
+  { "type": "Name", "text": "Demo" },
+  { "type": "Instructions", "text": "Use bun. Land small commits on main." },
+  { "click": "Create project" },
+  { "waitText": "Project chat" },
+  { "type": "Message the coordinator", "text": "Add a README badge" },
+  { "press": "Enter" },
+  { "waitText": "Started a thread: Add a README badge" },
+  { "click": "Open" },
+  { "waitText": "Add a README badge" },
+  { "click": "Project settings" },
+  { "waitText": "Instructions" }
+]

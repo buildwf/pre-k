@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "setup": "sh scripts/setup.sh",
+    "start": "sh scripts/start.sh",
+    "setup": "sh scripts/start.sh --no-launch",
     "dev": "point dev",
     "build": "point build",
     "typecheck": "tsc --noEmit",
