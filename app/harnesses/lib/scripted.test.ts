@@ -36,7 +36,7 @@ beforeEach(() => {
       `[ -n "$PREK_FAKE_CLI_SLEEP" ] && sleep "$PREK_FAKE_CLI_SLEEP"\n` +
       `[ "$PREK_FAKE_CLI_FAIL" = 1 ] && { echo 'push rejected' >&2; exit 1; }\n` +
       `echo 'Electron noise on stderr' >&2\n` +
-      `echo '{"number":7,"url":"https://github.com/test/repo/pull/7"}'\n`,
+      `echo '{"sha":"abc1234","url":"https://github.com/test/repo/commit/abc1234"}'\n`,
   );
   fs.chmodSync(cli, 0o755);
   process.env.POINT_CLI = cli;
@@ -104,7 +104,7 @@ const status = (events: HarnessEvent[]) =>
 const texts = (events: HarnessEvent[]) =>
   events.flatMap((e) => (e.type === "text" ? [e.text] : []));
 
-test("the builder commits one change on the thread's branch and opens the PR once", async () => {
+test("the builder commits one change on the thread's branch and lands it on main once", async () => {
   const o = start();
   const s = await builderHarness.start(o);
   await s.send("Add a setup note to docs/setup.md.", "start");
@@ -123,10 +123,10 @@ test("the builder commits one change on the thread's branch and opens the PR onc
   const calls = fs.readFileSync(cliLog, "utf8").trim().split("\n");
   expect(calls).toHaveLength(1);
   expect(calls[0]).toMatch(
-    /^github openPullRequest --title Add a setup note to docs\/setup\.md --body /,
+    /^github landOnMain --message Add a setup note to docs\/setup\.md\|/,
   );
   expect(texts(events).at(-1)).toBe(
-    "Opened a pull request: https://github.com/test/repo/pull/7",
+    "Landed on main: https://github.com/test/repo/commit/abc1234",
   );
   // Every tool.start has its tool.end; the turn reports a zero-cost usage.
   const starts = events.filter((e) => e.type === "tool.start").length;
@@ -140,7 +140,7 @@ test("the builder commits one change on the thread's branch and opens the PR onc
   s.close();
 });
 
-test("a rejected PR open fails the turn and says why", async () => {
+test("a rejected push fails the turn and says why", async () => {
   process.env.PREK_FAKE_CLI_FAIL = "1";
   const o = start();
   const s = await builderHarness.start(o);
@@ -150,7 +150,7 @@ test("a rejected PR open fails the turn and says why", async () => {
   expect(status(events)).toBe("failed");
   expect(events).toContainEqual({
     type: "error",
-    message: "could not open the pull request: push rejected",
+    message: "could not land on main: push rejected",
   });
   s.close();
 });
@@ -175,7 +175,7 @@ test("Cancel kills a running command; Stop reports exit after the turn's last ev
   const o = start();
   const s = await builderHarness.start(o);
   await s.send("Fix the typo", "start");
-  // Wait until the PR command (the fake CLI, sleeping) is running.
+  // Wait until the land command (the fake CLI, sleeping) is running.
   while (fs.existsSync(cliLog) === false)
     await new Promise((r) => setTimeout(r, 10));
   const t0 = Date.now();
@@ -183,7 +183,7 @@ test("Cancel kills a running command; Stop reports exit after the turn's last ev
   const events = await turnEnd(o);
   expect(Date.now() - t0).toBeLessThan(5_000);
   expect(status(events)).not.toBe("completed");
-  expect(texts(events).some((x) => x.startsWith("Opened a pull request"))).toBe(
+  expect(texts(events).some((x) => x.startsWith("Landed on main"))).toBe(
     false,
   );
 
