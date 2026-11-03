@@ -121,10 +121,27 @@ describe("github.landOnMain", () => {
     const before = sh(bare, "rev-parse", "main");
     const r = await t.rpc.landOnMain({ message: "Mine" });
 
-    expect(r.ok ? null : r.failure.code).toBe("CONFLICT");
+    if (r.ok || r.failure.code !== "CONFLICT") throw new Error("expected CONFLICT");
+    expect(r.failure.detail.files).toEqual(["README.md"]);
+    expect(r.failure.detail.next).toContain("git rebase origin/main");
     expect(sh(bare, "rev-parse", "main")).toBe(before);
     expect(fs.readFileSync(path.join(t.worktree, "README.md"), "utf8")).toBe("mine\n");
     expect(sh(t.worktree, "status", "--porcelain")).toBe("");
+
+    // The agent follows `next` offline (origin/main is already fetched), then lands.
+    try {
+      sh(t.worktree, "rebase", "origin/main");
+    } catch {
+      // Conflict expected: resolve it.
+    }
+    fs.writeFileSync(path.join(t.worktree, "README.md"), "theirs\nmine\n");
+    sh(t.worktree, "add", "README.md");
+    execFileSync("git", ["-c", "user.name=o", "-c", "user.email=o@p.q", "-c", "core.editor=true", "rebase", "--continue"], {
+      cwd: t.worktree,
+    });
+    const landed = await t.rpc.landOnMain({ message: "Mine" });
+
+    expect(landed.ok && sh(bare, "show", "main:README.md")).toBe("theirs\nmine");
   });
 
   it("only serves a tracked thread's own agent", async () => {

@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "setup": "sh scripts/setup.sh",
+    "start": "sh scripts/start.sh",
+    "setup": "sh scripts/start.sh --no-launch",
     "dev": "point dev",
     "build": "point build",
     "typecheck": "tsc --noEmit",
@@ -15,7 +16,8 @@
     "live": "scripts/live.sh",
     "verify": "bun run lint && bun run test && point build --no-package",
     "storybook": "storybook dev -p 6006 --exact-port --no-open",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "smoke:delivery": "sh scripts/smoke-delivery.sh"
   },
   "dependencies": {
     "point": "link:../cloudflare-point",

@@ -1,0 +1,48 @@
+[
+  {
+    "call": "projects.create",
+    "input": {
+      "id": "badges",
+      "name": "Badges"
+    }
+  },
+  {
+    "call": "github.linkRepo",
+    "input": {
+      "projectId": "badges",
+      "repo": "acme/test-repo"
+    }
+  },
+  {
+    "call": "projects.open",
+    "input": {
+      "id": "badges"
+    }
+  },
+  {
+    "call": "threads.start",
+    "input": {
+      "projectId": "badges",
+      "title": "Add a README badge",
+      "request": "Add a README badge",
+      "requestedBy": "Zack"
+    }
+  },
+  {
+    "waitText": "landed",
+    "timeoutMs": 60000
+  },
+  {
+    "waitText": "From “Add a README badge”"
+  },
+  {
+    "click": "Open thread"
+  },
+  {
+    "waitText": "Landed on main",
+    "timeoutMs": 20000
+  },
+  {
+    "waitText": "Open on GitHub"
+  }
+]

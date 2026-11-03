@@ -5,8 +5,8 @@ coordinator in the project chat, it splits work into threads, each thread runs a
 (PRs, files) come back to the project. Modeled on the project features of Claude and Cursor, with its own name and
 look. Built on [Cloudflare Point](https://github.com/buildwf/cloudflare-point).
 
-Current state: the Point `chat` template (one window, a coder agent on Claude Code with approvals, cancel, pause and
-resume, a git worker, the `agents` daemon). Domain work builds on it from here.
+Try it: `git clone https://github.com/buildwf/pre-k && cd pre-k && sh scripts/start.sh`. That clones and builds Point
+next to it if needed, installs, and opens the app. See the [UI tour](docs/ui-tour/README.md) for what each screen looks like.
 
 ## Project guide
 
@@ -14,8 +14,8 @@ resume, a git worker, the `agents` daemon). Domain work builds on it from here.
 |---|---|
 | Repo | https://github.com/buildwf/pre-k, Work on a branch from `main` and merge straight to `main` once `bun run verify` passes. No PRs (Zack, 2026-11-03: he is the only user). |
 | Framework | Point, linked from a sibling checkout: `"point": "link:../cloudflare-point"`. `point.lock` pins the Point commit and its check rules. Bump with `bunx point upgrade`. |
-| Package manager | bun (Zack, 2026-11-03). `bun install`, `bun run <script>`, `bunx point <command>`. Use `bun run test`, not `bun test` (that is bun's own runner, not Point's Vitest). Point's checkout keeps its own pnpm. |
-| Setup | `sh scripts/setup.sh` (clones and builds Point next to this repo if missing, runs `bun install`, fetches Electron). |
+| Package manager | bun (Zack, 2026-11-03). `bun install`, `bun run <script>`, `bunx point <command>`. Use `bun run test`, not `bun test` (that is bun's own runner, not Point's Vitest). Point builds with bun too (older Point checkouts with pnpm). |
+| Start | `sh scripts/start.sh` does everything and opens the app: clones Point next to this repo if missing (at the `point.lock` commit), builds it when needed, `bun install`, fetches Electron, then `bun run dev`. `--no-launch` stops before opening. |
 | Run | `bun run dev` opens the desktop app with reload. Needs `claude` on `PATH`, and `ANTHROPIC_API_KEY` or the keychain item `point`/`anthropic` (metered by the gateway), or `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (your Claude subscription, not metered by pre-k). Claude Code's saved `/login` does not work for thread builders: their sandbox can't read the macOS keychain. |
 | Headless check | `bunx point smoke --screenshot .point/smoke/shots [steps]`, e.g. `--click "New thread" --wait-text "idle"`. Runs under `xvfb-run` on Linux. |
 | Checks | `bun run lint` (`point check` with types), `bun run test`, `bun run verify` (lint, test, build). `bun run verify` passing with current `main` merged in is the merge gate. There is no cloud CI. |
@@ -23,6 +23,20 @@ resume, a git worker, the `agents` daemon). Domain work builds on it from here.
 | Execution | Cloud sessions (clone both repos side by side under one folder). Zack's Mac: `~/Projects/pre-k` next to `~/Projects/cloudflare-point`. |
 | Authority | Merging to `main`: yes. Deploy and spending: not granted. Dev apps stay closed (Zack, 2026-11-01): verify headless with `point smoke` and screenshots, never launch or focus a window on Zack's machine. |
 | Point gaps | File them as issues on `buildwf/cloudflare-point`; don't patch Point from pre-k. |
+
+## What a thread's builder may do without asking
+
+The sandbox is the guard, not per-call prompts (Zack, 2026-11-03: no ceremony). See `app/sandboxes/builder.sandbox.ts`.
+
+| Action | Policy | Why |
+|---|---|---|
+| Read, edit, run checks, `git commit`, `bun install` in its worktree | Runs without asking | The sandbox confines writes to the worktree and temp, and the network to the model APIs and npm. If Claude Code's own settings ask for a tool, pre-k shows Allow and Deny in the thread. |
+| Anything outside the worktree: other folders, userData, `~/.ssh`, the keychain, GitHub | Impossible, not asked | The sandbox has no path, host or credential for it. |
+| Land on `main` (`github landOnMain`) | Runs without asking, the only step that leaves the Mac | Zack chose no PRs. Main rebases and pushes with its token, never forced; a conflict or a newer `main` fails the call instead of overwriting. Undo is a revert on `main`. |
+| Opening PRs, force-pushing, deleting branches, deploying, spending beyond the model call | Not available to the builder | No tool exists for it. Adding one means deciding its approval here first. |
+
+Cost: the thread shows what its turns cost. On a `CLAUDE_CODE_OAUTH_TOKEN` that is Claude Code's estimate at API
+prices; your subscription is what's actually charged. On the gateway it is the metered cost.
 
 ## Domains
 

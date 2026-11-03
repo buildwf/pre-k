@@ -1,5 +1,5 @@
 {
-  "point": "db76afc0a279396fb0043c2ac100360cf8debe9e",
+  "point": "f08660b80e4bae961c5af43d18a1d9b6e1187187",
   "rules": {
     "agent-script": "error",
     "anti-slop": "error",
@@ -77,6 +77,7 @@
     "service-forwards-arg": "error",
     "stop-unsmoked-window": "error",
     "stop-untested-change": "error",
+    "stories-not-in-tests": "warning",
     "stripe-customer-arg": "error",
     "stripe-secret-in-source": "error",
     "theme-by-hand": "error",
