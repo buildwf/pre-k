@@ -2,8 +2,10 @@ import { defineRouter, procedure } from "point/app";
 import { connect, ConnectorError } from "point/connectors";
 import { z } from "zod";
 import github from "../connectors/github.connector";
-import { publishBranch } from "../lib/checkout";
-import { newPullRequest } from "../schemas/github";
+import { ensureClone, GitError, publishBranch } from "../lib/checkout";
+import { checkoutPath, remoteUrl } from "../lib/paths";
+import { newPullRequest, repoName } from "../schemas/github";
+import { linkedRepo } from "../schemas/workspace";
 import { callerThread } from "../threads/state";
 
 /**
@@ -20,6 +22,56 @@ export default defineRouter({
 
     return { login: me.login, name: me.name ?? null, url: me.url };
   }),
+
+  /**
+   * Link a repository to a project (pre-k#10): check the person's token can reach it, clone it once into the app's own
+   * folder (later calls fetch), and store its GitHub fields on the project through projects.update.
+   */
+  linkRepo: procedure
+    .input(z.object({ projectId: z.string().min(1), repo: repoName }))
+    .output(linkedRepo)
+    .errors({
+      NO_PROJECT: z.object({ projectId: z.string() }),
+      REPO_NOT_VISIBLE: z.object({ repo: z.string() }),
+      CLONE_FAILED: z.object({ message: z.string() }),
+      GITHUB_FAILED: z.object({ status: z.number(), message: z.string() }),
+    })
+    .cli()
+    .handler(async ({ input, connectors, rpc, fail }) => {
+      const token = await connectors.require("github");
+      let found;
+
+      try {
+        found = await connect(github, { token }).getRepo({ repo: input.repo });
+      } catch (e) {
+        // GitHub answers 404 for a private repo the token can't see, as for one that doesn't exist.
+        if (e instanceof ConnectorError && e.status === 404) return fail("REPO_NOT_VISIBLE", { repo: input.repo });
+        if (e instanceof ConnectorError) return fail("GITHUB_FAILED", { status: e.status, message: e.message });
+        throw e;
+      }
+
+      const dir = checkoutPath(found.repo);
+
+      try {
+        await ensureClone({ url: remoteUrl(found.repo), dir, token });
+      } catch (e) {
+        if (e instanceof GitError) return fail("CLONE_FAILED", { message: e.message });
+        throw e;
+      }
+
+      const updated = await rpc.call("projects.update", {
+        id: input.projectId,
+        repo: found.repo,
+        defaultBranch: found.defaultBranch,
+        private: found.private,
+        htmlUrl: found.url,
+        checkoutPath: dir,
+      });
+
+      if (!updated.ok) return fail("NO_PROJECT", { projectId: input.projectId });
+
+      return { repo: found.repo, defaultBranch: found.defaultBranch, checkoutPath: dir };
+    }),
 
   /**
    * A thread's agent delivers its work (pre-k#14): `"$POINT_CLI" github openPullRequest --title T --body B`. Main,
