@@ -20,7 +20,7 @@ export type OutputLike =
   | { kind: "commit"; repo: string; sha: string; branch: string };
 
 /**
- * `endedAs` wins: a person or the coordinator closed the thread. Otherwise Point's status decides. An idle thread that
+ * `endedAs` wins: a person or the coordinator closed the thread. Then a failed latest `attempt` on a thread at rest. Otherwise Point's status decides. An idle thread that
  * opened a PR is waiting for review; one that landed commits (no PR) has landed its work. `status` is undefined when
  * the agents daemon has no such thread.
  */
@@ -28,8 +28,11 @@ export function threadState(
   status: ThreadStatus | undefined,
   endedAs: EndedAs | undefined,
   outputs: readonly OutputLike[],
+  attempt?: { failed: boolean } | undefined,
 ): ThreadState {
   if (endedAs) return endedAs;
+  // A finished thread whose latest attempt failed is failed until the next attempt; a running one is working again.
+  if (attempt?.failed && (status === undefined || status === "idle" || status === "stopped")) return "failed";
   switch (status) {
     case "starting":
     case "running":

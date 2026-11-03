@@ -59,6 +59,8 @@ describe("threads.followUp", () => {
     answer = { ok: false, failure: { code: "INTERNAL", detail: { message: "no API key" } } };
     const r = await window.rpc.followUp({ threadId: "t1", text: "Retry it" });
     expect(!r.ok && r.failure).toMatchObject({ code: "SEND_FAILED", detail: { message: "INTERNAL: no API key" } });
+    // The list says "failed" for it.
+    expect(window.collections.get("threads", "t1")?.lastAttempt).toMatchObject({ failed: true, message: "INTERNAL: no API key" });
   });
 
   it("refuses an unknown thread, an empty message and a thread's own agent", async () => {

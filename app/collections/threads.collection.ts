@@ -15,6 +15,9 @@ export default defineCollection({
     branch: z.string().optional(),
     worktree: z.string().optional(),
     endedAs: z.enum(["done", "failed", "stopped"]).optional(),
+    // How the latest attempt went, so the list can say "failed" without opening every transcript. Main writes it when a
+    // turn ends (app/threads/attempts.ts) or a message can't be delivered.
+    lastAttempt: z.object({ failed: z.boolean(), message: z.string().optional(), at: z.number() }).optional(),
     createdAt: z.number(),
     updatedAt: z.number(),
   }),

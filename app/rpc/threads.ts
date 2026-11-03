@@ -5,6 +5,7 @@ import path from "node:path";
 import { z } from "zod";
 import { builderAgentFor } from "../schemas/harness";
 import { preparedWorkspace as prepared } from "../schemas/workspace";
+import { recordAttempt } from "../threads/attempts";
 import { callerThread, outputKey, threadState } from "../threads/state";
 
 const status = z.enum(["starting", "running", "parked", "paused", "idle", "stopped", "interrupted"]);
@@ -152,6 +153,8 @@ export default defineRouter({
         by: input.requestedBy,
       });
       const r = sent.ok ? receipt.safeParse(sent.value) : undefined;
+      // A harness that can't start (no key, no binary) never runs a turn: record the failure for the list here.
+      if (!sent.ok) await recordAttempt(collections, threadId.data, true, messageOf(sent.failure));
       return {
         threadId: threadId.data,
         branch: workspace?.branch,
@@ -190,7 +193,7 @@ export default defineRouter({
             requestedBy: t.requestedBy,
             repo: t.repo,
             branch: t.branch,
-            state: threadState(statusOf.get(t.threadId), t.endedAs, mine),
+            state: threadState(statusOf.get(t.threadId), t.endedAs, mine, t.lastAttempt),
             outputs: mine,
             updatedAt: t.updatedAt,
           };
@@ -257,7 +260,10 @@ export default defineRouter({
         turn: "queue",
         ...(input.by ? { by: input.by } : {}),
       });
-      if (!sent.ok) return fail("SEND_FAILED", { message: messageOf(sent.failure) });
+      if (!sent.ok) {
+        await recordAttempt(collections, input.threadId, true, messageOf(sent.failure));
+        return fail("SEND_FAILED", { message: messageOf(sent.failure) });
+      }
       const r = receipt.safeParse(sent.value);
       return { reopened: thread.endedAs !== undefined, message: r.success ? r.data : ("delivered" as const) };
     }),
