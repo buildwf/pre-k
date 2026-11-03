@@ -1,5 +1,5 @@
 // Storybook for the app's components in app/ui/, at http://localhost:6006. `point mcp` and `point dev` start it (or
-// run `pnpm storybook`), and `point mcp` serves its MCP tools to coding agents as storybook_*: they list the
+// run `bun run storybook`), and `point mcp` serves its MCP tools to coding agents as storybook_*: they list the
 // components (docs-list), read one's props and stories (docs-show) and preview stories.
 export default {
   framework: "@storybook/react-vite",

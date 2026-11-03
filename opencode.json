@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "point": { "type": "local", "command": ["pnpm", "-s", "exec", "point", "mcp"], "enabled": true }
+    "point": { "type": "local", "command": ["bunx", "point", "mcp"], "enabled": true }
   }
 }

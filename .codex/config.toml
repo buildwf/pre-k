@@ -1,7 +1,7 @@
 # Point's MCP server: generators for every Point concept, point check, rule explanations and docs (see AGENTS.md), and
 # Storybook's tools for the components in app/ui/ (it starts the app's Storybook itself).
 [mcp_servers.point]
-command = "pnpm"
-args = ["-s", "exec", "point", "mcp"]
+command = "bunx"
+args = ["point", "mcp"]
 # smoke builds and runs the app, which can take a minute or two cold; Codex gives a tool 60 seconds by default.
 tool_timeout_sec = 600

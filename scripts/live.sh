@@ -1,5 +1,5 @@
 #!/bin/sh
-# Smoke the running dev app through its CLI (`pnpm live`). Start `pnpm dev` first.
+# Smoke the running dev app through its CLI (`bun run live`). Start `bun run dev` first.
 set -e
 cd "$(dirname "$0")/.."
 P() { npx point cli "$@"; }

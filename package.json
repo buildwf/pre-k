@@ -13,7 +13,7 @@
     "lint": "point check",
     "check": "point check",
     "live": "scripts/live.sh",
-    "verify": "pnpm lint && pnpm run --if-present test && point build --no-package",
+    "verify": "bun run lint && bun run test && point build --no-package",
     "storybook": "storybook dev -p 6006 --exact-port --no-open",
     "build-storybook": "storybook build"
   },
@@ -37,5 +37,9 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
-  }
+  },
+  "trustedDependencies": [
+    "electron",
+    "esbuild"
+  ]
 }

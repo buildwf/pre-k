@@ -1,5 +1,0 @@
-# The packages whose install scripts this app needs: Electron downloads its binary, esbuild its native build.
-# `point new` leaves this file out when the app is made inside another pnpm workspace, whose root sets these.
-allowBuilds:
-  electron: true
-  esbuild: true

@@ -20,12 +20,12 @@ fi
 input=''
 [ -t 0 ] || input=$(cat)
 err=$(mktemp) || exit 1
-out=$(printf '%s' "$input" | pnpm -s exec point check "$@" 2>"$err")
+out=$(printf '%s' "$input" | bunx point check "$@" 2>"$err")
 code=$?
 case $code in
   0) [ -n "$out" ] && printf '%s\n' "$out" ;;
   1) cat "$err" >&2; code=2 ;;
-  *) printf 'point check could not run (try pnpm install):\n%s\n' "$out$(cat "$err")" >&2; code=1 ;;
+  *) printf 'point check could not run (try bun install):\n%s\n' "$out$(cat "$err")" >&2; code=1 ;;
 esac
 rm -f "$err"
 exit $code

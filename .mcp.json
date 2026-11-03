@@ -1,5 +1,5 @@
 {
   "mcpServers": {
-    "point": { "command": "pnpm", "args": ["-s", "exec", "point", "mcp"] }
+    "point": { "command": "bunx", "args": ["point", "mcp"] }
   }
 }
