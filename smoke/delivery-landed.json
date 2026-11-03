@@ -44,5 +44,8 @@
   },
   {
     "waitText": "Open on GitHub"
+  },
+  {
+    "waitText": "Checks passed"
   }
 ]

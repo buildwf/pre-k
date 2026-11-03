@@ -11,3 +11,18 @@ export const Landed = {
   },
 };
 export const NoTitle = { args: { ...Landed.args, title: undefined } };
+export const ChecksPassed = {
+  args: { ...Landed.args, checks: { state: "success", checks: [{ name: "verify", state: "success" }] } },
+};
+export const ChecksFailed = {
+  args: {
+    ...Landed.args,
+    checks: {
+      state: "failure",
+      checks: [
+        { name: "lint", state: "success" },
+        { name: "verify", state: "failure" },
+      ],
+    },
+  },
+};

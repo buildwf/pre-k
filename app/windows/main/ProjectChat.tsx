@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LandedCommitCard } from "../../ui/LandedCommitCard";
+import { ThreadLandedCommit } from "../../lib/ThreadLandedCommit";
 import { rpc, useAgent, useCollection, useThreads } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../../.point/components";
@@ -215,7 +215,7 @@ function StartedThread({
           o.kind === "pr" ? (
             <ThreadPullRequest key={o.id} repo={o.repo} number={o.number} />
           ) : (
-            <LandedCommitCard key={o.id} repo={o.repo} branch={o.branch} sha={o.sha} title={o.title} />
+            <ThreadLandedCommit key={o.id} repo={o.repo} branch={o.branch} sha={o.sha} title={o.title} />
           ),
         )}
       </Stack>

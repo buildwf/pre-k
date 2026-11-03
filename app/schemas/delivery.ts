@@ -20,3 +20,14 @@ export const PullRequestCardData = PullRequestRef.extend({
 });
 
 export type PullRequestCardData = z.infer<typeof PullRequestCardData>;
+
+/** A commit or branch whose checks to read. */
+export const ChecksRef = z.object({ repo: PullRequestRef.shape.repo, ref: z.string().min(1).max(255) });
+
+/** Check runs and commit statuses on a ref, rolled up the way Point's `getChecks` does. */
+export const ChecksSummary = z.object({
+  state: z.enum(["pending", "success", "failure", "none"]),
+  checks: z.array(z.object({ name: z.string(), state: z.enum(["pending", "success", "failure", "none"]), url: z.string().optional() })),
+});
+
+export type ChecksSummary = z.infer<typeof ChecksSummary>;
