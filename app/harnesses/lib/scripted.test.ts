@@ -33,7 +33,9 @@ beforeEach(() => {
     cli,
     // One log line per call: newlines inside an argument (the PR body) become "|".
     `#!/bin/sh\n{ printf '%s' "$*" | tr '\\n' '|'; echo; } >> ${JSON.stringify(cliLog)}\n` +
-      `[ "$1 $2" = "coordinator name" ] && { echo Zack; exit 0; }\n` +
+      // PREK_FAKE_NAME_CRASHES=n: the first n `coordinator name` calls crash with no output, like cloudflare-point#740.
+      `if [ "$1 $2" = "coordinator name" ]; then c=$(grep -c '^coordinator name' ${JSON.stringify(cliLog)}); ` +
+      `[ "$c" -le "\${PREK_FAKE_NAME_CRASHES:-0}" ] && exit 139; echo Zack; exit 0; fi\n` +
       `[ -n "$PREK_FAKE_CLI_SLEEP" ] && sleep "$PREK_FAKE_CLI_SLEEP"\n` +
       `[ "$PREK_FAKE_CLI_FAIL" = 1 ] && { echo 'push rejected' >&2; exit 1; }\n` +
       `echo 'Electron noise on stderr' >&2\n` +
@@ -47,6 +49,7 @@ afterEach(() => {
   delete process.env.POINT_CLI;
   delete process.env.PREK_FAKE_CLI_FAIL;
   delete process.env.PREK_FAKE_CLI_SLEEP;
+  delete process.env.PREK_FAKE_NAME_CRASHES;
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -232,6 +235,27 @@ test("the coordinator starts a thread for a request and answers a question in te
   ]);
   expect(texts(events)).toContain("Started a thread for “Add a README badge”.");
   expect(texts(events).at(-1)).toMatch(/^I'm the scripted coordinator/);
+  s.close();
+});
+
+test("the coordinator asks for the name again after a crash, and never starts a thread without one", async () => {
+  process.env.PREK_FAKE_NAME_CRASHES = "1";
+  const o = start();
+  const s = await coordinatorHarness.start(o);
+  await s.send("Add a README badge", "start");
+  await turnEnd(o);
+  expect(fs.readFileSync(cliLog, "utf8").trim().split("\n")).toEqual([
+    "coordinator name",
+    "coordinator name",
+    "threads start --title Add a README badge --request Add a README badge --requestedBy Zack --json",
+  ]);
+
+  fs.rmSync(cliLog);
+  process.env.PREK_FAKE_NAME_CRASHES = "2";
+  await s.send("Add a README badge", "start");
+  const events = await turnEnd(o, 2);
+  expect(fs.readFileSync(cliLog, "utf8").trim().split("\n")).toEqual(["coordinator name", "coordinator name"]);
+  expect(status(events)).toBe("failed");
   s.close();
 });
 
