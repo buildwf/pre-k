@@ -9,9 +9,8 @@ import type { HarnessSession, HarnessStart } from "point/app";
 
 /** The app commands the scripted agents run, kept in one place so a renamed procedure is one edit. */
 export const commands = {
-  /** #14: push the thread's branch and open its PR; main reads repo, branch and base from the thread record. */
-  openPullRequest: (title: string, body: string) =>
-    `"$POINT_CLI" github openPullRequest --title ${sh(title)} --body ${sh(body)} --json`,
+  /** Land the thread's branch on the default branch (Zack: no PRs); main reads repo, branch and base from the thread. */
+  landOnMain: (message: string) => `"$POINT_CLI" github landOnMain --message ${sh(message)} --json`,
   /**
    * #6/#13: the coordinator starts a thread for a request. The project comes from the caller (#25); `requestedBy` is
    * required by #6. A harness isn't told who sent a message, so the scripted coordinator names a fixed person.
@@ -230,7 +229,7 @@ export function scriptedSession(
   };
 }
 
-/** The builder's turn: change the named file (or README.md), commit it on the thread's branch, open the PR. */
+/** The builder's turn: change the named file (or README.md), commit it on the thread's branch, land it on main. */
 export async function builderTurn(t: Turn): Promise<void> {
   const request = t.text.trim();
   const title = titleOf(request);
@@ -252,22 +251,15 @@ export async function builderTurn(t: Turn): Promise<void> {
 
   if (t.stopped()) return;
 
-  // `exec` so the PR command is the process Cancel kills, not a shell that would leave it running.
-  const pr = await t.bash(
-    "exec " +
-      commands.openPullRequest(
-        title,
-        `${request}\n\nMade by pre-k's scripted builder (no model).`,
-      ),
+  // `exec` so the land command is the process Cancel kills, not a shell that would leave it running.
+  const landed = await t.bash(
+    "exec " + commands.landOnMain(`${title}\n\nMade by pre-k's scripted builder (no model).`),
   );
 
-  if (pr.code !== 0)
-    throw new Error(`could not open the pull request: ${pr.out}`);
+  if (landed.code !== 0) throw new Error(`could not land on main: ${landed.out}`);
 
-  const url = urlOf(pr.out);
-  await t.say(
-    url ? `Opened a pull request: ${url}` : `Opened a pull request.\n${pr.out}`,
-  );
+  const url = urlOf(landed.out);
+  await t.say(url ? `Landed on main: ${url}` : `Landed on main.\n${landed.out}`);
 }
 
 /** The coordinator's turn: a question gets a short answer; anything else becomes a thread. */
