@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { defineRouter, procedure } from "point/app";
 import { z } from "zod";
-import { contextText, projectOfThread } from "../projects/caller";
+import { contextText, INSTRUCTIONS_LIMIT, projectOfThread } from "../projects/caller";
 import { project, projectChange } from "../schemas/project";
 import { callerThread } from "../threads/state";
 
@@ -13,7 +13,7 @@ export default defineRouter({
   create: procedure
     .input(
       project.pick({ name: true }).extend({
-        instructions: z.string().default(""),
+        instructions: z.string().max(INSTRUCTIONS_LIMIT).default(""),
         // A chosen id, so a smoke run or script can name the project in its later steps. Default: a random one.
         id: z.string().trim().min(1).max(64).optional(),
       }),
@@ -36,7 +36,7 @@ export default defineRouter({
 
   // Changes only the fields given, so Project setup's edits never clear the GitHub fields and the reverse.
   update: procedure
-    .input(projectChange)
+    .input(projectChange.extend({ instructions: z.string().max(INSTRUCTIONS_LIMIT).optional() }))
     .errors(notFound)
     .cli()
     .handler(async ({ input, collections, fail }) => {
@@ -81,9 +81,9 @@ export default defineRouter({
     collections.all("projects").sort((a, b) => b.lastOpenedAt - a.lastOpenedAt),
   ),
 
-  // What every agent in a project reads first: `"$POINT_CLI" projects context`. The project comes from the calling
-  // thread (Point has no per-thread context input on agents.start yet: buildwf/cloudflare-point#669). The CLI and
-  // windows name it with --projectId.
+  // A project's standing context, always within Point's limit for agents.start's `context`. Main passes it when it
+  // starts a thread (`rpc.call("projects.context", { projectId })`); an agent can re-read it, with memory saved since,
+  // through `"$POINT_CLI" projects context`, where the project comes from its thread. The CLI names it with --projectId.
   context: procedure
     .input(z.object({ projectId: z.string().min(1).optional() }).default({}))
     .output(z.string())
