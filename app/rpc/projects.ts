@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { defineRouter, procedure } from "point/app";
 import { z } from "zod";
+import { contextText, projectOfThread } from "../projects/caller";
 import { project, projectChange } from "../schemas/project";
+import { callerThread } from "../threads/state";
 
 const notFound = { NOT_FOUND: z.object({ id: z.string() }) };
 
@@ -69,4 +71,25 @@ export default defineRouter({
   list: procedure.cli().handler(({ collections }) =>
     collections.all("projects").sort((a, b) => b.lastOpenedAt - a.lastOpenedAt),
   ),
+
+  // What every agent in a project reads first: `"$POINT_CLI" projects context`. The project comes from the calling
+  // thread (Point has no per-thread context input on agents.start yet: buildwf/cloudflare-point#669). The CLI and
+  // windows name it with --projectId.
+  context: procedure
+    .input(z.object({ projectId: z.string().min(1).optional() }).default({}))
+    .output(z.string())
+    .errors({ NOT_IN_PROJECT: z.object({}) })
+    .tool()
+    .cli()
+    .handler(async ({ input, caller, collections, rpc, fail }) => {
+      const thread = callerThread(caller);
+      const projectId = thread
+        ? await projectOfThread(thread, collections.get("threads", thread)?.projectId, rpc.call)
+        : input.projectId;
+      const row = projectId ? collections.get("projects", projectId) : undefined;
+
+      if (!row) return fail("NOT_IN_PROJECT", {});
+
+      return contextText(row, collections.all("memory").filter((n) => n.projectId === row.id));
+    }),
 });

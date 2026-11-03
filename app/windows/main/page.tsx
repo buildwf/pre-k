@@ -89,7 +89,7 @@ export default function Page() {
         </Disclosure>
         {problem && <Text tone="danger">{problem}</Text>}
         {/* One local project until Project setup adds project records. */}
-        <Threads projectId={project.id} />
+        <Threads key={project.id} projectId={project.id} />
         {threadId ? (
           <Chat threadId={threadId} />
         ) : (

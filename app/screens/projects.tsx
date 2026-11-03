@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { rpc, useCollection } from "point/client";
-import { useLiveQuery } from "point/cloud/db";
+import { eq, useLiveQuery } from "point/cloud/db";
 import type { Project, ProjectChange } from "../schemas/project";
 import { Button } from "../ui/Button";
 import { Disclosure } from "../ui/Disclosure";
 import { Field } from "../ui/Field";
+import { EmptyState } from "../ui/EmptyState";
 import { Heading } from "../ui/Heading";
+import { List, ListItem } from "../ui/List";
 import { Select } from "../ui/Select";
 import { Stack } from "../ui/Stack";
 import { Text } from "../ui/Text";
@@ -142,6 +144,64 @@ function ProjectSettings({ project }: { project: Project }) {
       <Text tone="muted" role="status">
         {status}
       </Text>
+      <Memory projectId={project.id} />
+    </Stack>
+  );
+}
+
+// What agents saved for later threads (and what the person adds). Agents read it with `projects context`.
+function Memory({ projectId }: { projectId: string }) {
+  const memory = useCollection("memory");
+  const { data } = useLiveQuery(
+    (q) => q.from({ n: memory }).where(({ n }) => eq(n.projectId, projectId)).orderBy(({ n }) => n.at, "asc"),
+  );
+  const [text, setText] = useState("");
+  const [problem, setProblem] = useState<string>();
+
+  return (
+    <Stack gap={8}>
+      <Heading level={2}>Memory</Heading>
+      {data.length === 0 ? (
+        <EmptyState title="Nothing saved yet">
+          Agents save what a later thread should know. You can add a note too.
+        </EmptyState>
+      ) : (
+        <List label="Project memory">
+          {data.map((n) => (
+            <ListItem
+              key={n.id}
+              actions={
+                <Button variant="quiet" onClick={() => void rpc.memory.remove({ id: n.id })}>
+                  Remove
+                </Button>
+              }
+            >
+              <Text>{n.text}</Text>
+              <Text tone="muted">
+                {n.savedBy === "person" ? "you" : "a thread"} · {new Date(n.at).toLocaleDateString()}
+              </Text>
+            </ListItem>
+          ))}
+        </List>
+      )}
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const r = await rpc.memory.save({ projectId, text });
+
+          if (r.ok) setText("");
+          setProblem(r.ok ? undefined : r.failure.code);
+        }}
+      >
+        <Stack direction="row" gap={8} align="end">
+          <Field label="Add a note" wide error={problem}>
+            <TextField value={text} onChange={(e) => setText(e.target.value)} />
+          </Field>
+          <Button type="submit" disabled={!text.trim()}>
+            Add
+          </Button>
+        </Stack>
+      </form>
     </Stack>
   );
 }
