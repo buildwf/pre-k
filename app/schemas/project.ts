@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { builderHarness } from "./harness";
 
 // One project. Project setup owns name, instructions and the timestamps; the GitHub fields are written by the GitHub
 // domain (buildwf/pre-k#10) through projects.update.
@@ -13,6 +14,8 @@ export const project = z.object({
   private: z.boolean().optional(),
   htmlUrl: z.string().optional(),
   checkoutPath: z.string().optional(),
+  // The coding agent this project's new threads run (Harnesses owner). Unset means Claude Code.
+  harness: builderHarness.optional(),
 });
 
 export type Project = z.infer<typeof project>;

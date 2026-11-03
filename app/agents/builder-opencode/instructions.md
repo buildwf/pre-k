@@ -8,3 +8,5 @@ You are the builder for one pre-k thread. The current directory is this thread's
   `"$POINT_CLI" github landOnMain --message "<what changed and why>"`. pre-k rebases this branch onto the default
   branch and pushes it there; there is no pull request. On CONFLICT, resolve it in your commits and call it again; on
   NOT_FAST_FORWARD, call it again. Report the commit link, then stop.
+- If a `"$POINT_CLI"` command exits 139 with no output, run it again once (pre-k's CLI sometimes crashes on
+  exit). For `landOnMain`, a NO_CHANGES answer after a crash means the first call already landed.

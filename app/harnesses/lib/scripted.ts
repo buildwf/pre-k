@@ -252,11 +252,23 @@ export async function builderTurn(t: Turn): Promise<void> {
   if (t.stopped()) return;
 
   // `exec` so the land command is the process Cancel kills, not a shell that would leave it running.
-  const landed = await t.bash(
-    "exec " + commands.landOnMain(`${title}\n\nMade by pre-k's scripted builder (no model).`),
-  );
+  const land = () =>
+    t.bash("exec " + commands.landOnMain(`${title}\n\nMade by pre-k's scripted builder (no model).`));
+  let landed = await land();
 
-  if (landed.code !== 0) throw new Error(`could not land on main: ${landed.out}`);
+  // Point's app CLI sometimes segfaults (139) with nothing printed. Landing again is safe: it never forces, and if the
+  // first call did push, the second finds no changes, which then means the work is on main already.
+  if (landed.code === 139 && !t.stopped()) {
+    landed = await land();
+    if (landed.code !== 0 && /NO_CHANGES/.test(landed.out)) {
+      await t.say("Landed on main (the first reply was lost, so there's no commit link).");
+
+      return;
+    }
+  }
+
+  if (landed.code !== 0)
+    throw new Error(`could not land on main: ${landed.out || `the command exited ${landed.code} and printed nothing`}`);
 
   const url = urlOf(landed.out);
   await t.say(url ? `Landed on main: ${url}` : `Landed on main.\n${landed.out}`);
