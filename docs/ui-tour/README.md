@@ -1,10 +1,8 @@
 # UI tour
 
-Headless screenshots of pre-k's one window, captured with no model or key (the scripted harnesses):
-
-```sh
-PREK_HARNESS=scripted bunx point smoke --no-secrets --screenshot .point/smoke/tour --steps smoke/ui-tour.json --timeout 60000
-```
+Headless screenshots of pre-k's one window, captured with no model or key (the scripted harnesses) by
+`bun run tour` ([scripts/tour.sh](../../scripts/tour.sh)), which `bun run verify` runs last. They are retaken whenever
+`app/` or `smoke/ui-tour.json` changed since the last shots, so commit them with your UI change.
 
 Each shot is the visible 800x600 part of the window after a step. Everything is one scrolling page today.
 
