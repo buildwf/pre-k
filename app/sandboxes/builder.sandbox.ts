@@ -4,6 +4,8 @@ import { defineSandbox } from "point/app";
 // network reaches only the model APIs and the npm registry. No GitHub host and no git credentials: pushing the branch
 // and opening the pull request happen in main through the GitHub tool (#14), so a prompt-injected agent can't publish.
 // Seatbelt confines this on macOS only; on Linux Point runs it unconfined and says so on stderr.
+// `read: "workspace"` also hides the macOS keychain, so Claude Code's saved /login can't be used here: give the
+// daemon an Anthropic key (gateway) or CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`, which Point passes through.
 export default defineSandbox({
   provider: "local",
   read: "workspace",

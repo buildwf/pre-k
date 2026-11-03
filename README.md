@@ -16,7 +16,7 @@ resume, a git worker, the `agents` daemon). Domain work builds on it from here.
 | Framework | Point, linked from a sibling checkout: `"point": "link:../cloudflare-point"`. `point.lock` pins the Point commit and its check rules. Bump with `bunx point upgrade`. |
 | Package manager | bun (Zack, 2026-11-03). `bun install`, `bun run <script>`, `bunx point <command>`. Use `bun run test`, not `bun test` (that is bun's own runner, not Point's Vitest). Point's checkout keeps its own pnpm. |
 | Setup | `sh scripts/setup.sh` (clones and builds Point next to this repo if missing, runs `bun install`, fetches Electron). |
-| Run | `bun run dev` opens the desktop app with reload. Needs `claude` on `PATH`, and `ANTHROPIC_API_KEY` or the keychain item `point`/`anthropic` (or Claude Code's saved login). |
+| Run | `bun run dev` opens the desktop app with reload. Needs `claude` on `PATH`, and `ANTHROPIC_API_KEY` or the keychain item `point`/`anthropic` (metered by the gateway), or `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (your Claude subscription, not metered by pre-k). Claude Code's saved `/login` does not work for thread builders: their sandbox can't read the macOS keychain. |
 | Headless check | `bunx point smoke --screenshot .point/smoke/shots [steps]`, e.g. `--click "New thread" --wait-text "idle"`. Runs under `xvfb-run` on Linux. |
 | Checks | `bun run lint` (`point check` with types), `bun run test`, `bun run verify` (lint, test, build). `bun run verify` passing with current `main` merged in is the merge gate. There is no cloud CI. |
 | Release | `point build` then `point release`. Not set up: no update feed, signing or Cloudflare account configured. |
