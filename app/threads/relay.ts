@@ -73,7 +73,7 @@ function reason(message: string | undefined): string {
     .map((l) => l.trim())
     .filter(Boolean)
     .join(" ")
-    .replace(/[.\s]+$/, "");
+    .replace(/[.:\s]+$/, "");
   return line.length > 120 ? `${line.slice(0, 119)}…` : line;
 }
 
