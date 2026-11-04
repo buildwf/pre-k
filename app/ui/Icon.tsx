@@ -47,6 +47,13 @@ const paths = {
       <path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12" />
     </>
   ),
+  arrowLeft: <path d="m12 19-7-7 7-7M19 12H5" />,
+  file: (
+    <>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+    </>
+  ),
   arrowUp: <path d="m5 12 7-7 7 7M12 19V5" />,
   stop: <rect width="12" height="12" x="6" y="6" rx="1" />,
   pause: <path d="M9 5v14M15 5v14" />,

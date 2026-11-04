@@ -26,3 +26,4 @@ export const ChecksFailed = {
     },
   },
 };
+export const WithViewChanges = { args: { ...Landed.args, onViewChanges: () => {} } };

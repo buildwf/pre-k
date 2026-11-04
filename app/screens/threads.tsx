@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { ThreadLandedCommit } from "../lib/ThreadLandedCommit";
-import { z } from "zod";
 import { rpc, useAgent, useCollection, useThreads } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../.point/components";
@@ -10,6 +9,7 @@ import { failedAttempts, lastAttempt, threadState, type ThreadState } from "../t
 import { Alert } from "../ui/Alert";
 import { ApprovalPrompt } from "../ui/ApprovalPrompt";
 import { formatCost, threadCost } from "../lib/cost";
+import { toolLine } from "../threads/toolLine";
 import { Badge, type BadgeTone } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Composer } from "../ui/Composer";
@@ -157,10 +157,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
   const renderMessage = (m: (typeof agent.messages)[number]) =>
     m.role === "tool" ? (
             <Message key={m.id} from="tool" title={m.name ?? "tool"} pending={!m.done}>
-              {JSON.stringify(m.input)}
-              {m.done && m.output !== undefined
-                ? ` → ${z.string().safeParse(m.output).data ?? JSON.stringify(m.output)}`
-                : ""}
+              {toolLine(m.name, m.input)}
             </Message>
           ) : m.role === "reasoning" ? (
             <Disclosure key={m.id} summary={m.done ? "Thinking" : "Thinking…"}>
@@ -221,7 +218,8 @@ export function ThreadView({ threadId }: { threadId: string }) {
         }
       />
       <PaneBody>
-      <Text tone="muted">{state.help}</Text>
+      {/* The Retry alert says what to do when the last attempt failed; the help line would say it twice. */}
+      {!retryable && <Text tone="muted">{state.help}</Text>}
       <Alert tone="danger">{problem}</Alert>
       <MessageList>
         {agent.messages.flatMap((m, i) => {

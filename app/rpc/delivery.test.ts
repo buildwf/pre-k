@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { ConnectorError } from "point/connectors";
 import { fakeConnector } from "point/connectors/testing";
 import { testClient } from "point/rpc/testing";
@@ -119,6 +123,47 @@ describe("delivery.checks", () => {
       throw new ConnectorError("github", 422, "No commit found for SHA");
     };
     const r = await rpc.checks({ repo: "acme/test-repo", ref: sha });
+
+    expect(r.ok ? null : r.failure.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("delivery.commitDiff", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pre-k-checkouts-"));
+  const dir = path.join(root, "acme", "test-repo");
+  const before = process.env.PRE_K_CHECKOUTS;
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd: dir, encoding: "utf8" }).trim();
+
+  fs.mkdirSync(dir, { recursive: true });
+  git("init", "-q", "-b", "main");
+  fs.writeFileSync(path.join(dir, "README.md"), "# repo\n");
+  git("add", "-A");
+  git("commit", "-qm", "init");
+  fs.appendFileSync(path.join(dir, "README.md"), "badge\n");
+  git("commit", "-qam", "Add a README badge");
+  const sha = git("rev-parse", "HEAD");
+
+  beforeEach(() => {
+    process.env.PRE_K_CHECKOUTS = root;
+  });
+  afterAll(() => {
+    if (before === undefined) delete process.env.PRE_K_CHECKOUTS;
+    else process.env.PRE_K_CHECKOUTS = before;
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("reads a landed commit's files from pre-k's clone", async () => {
+    const r = await rpc.commitDiff({ repo: "acme/test-repo", sha });
+
+    expect(r.ok && { subject: r.value.subject, files: r.value.files.map((f) => [f.path, f.additions, f.deletions]) }).toEqual({
+      subject: "Add a README badge",
+      files: [["README.md", 1, 0]],
+    });
+  });
+
+  it("fails with NOT_FOUND for a commit the clone doesn't have", async () => {
+    const r = await rpc.commitDiff({ repo: "acme/test-repo", sha: "f".repeat(40) });
 
     expect(r.ok ? null : r.failure.code).toBe("NOT_FOUND");
   });

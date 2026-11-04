@@ -38,6 +38,12 @@ interface Frame {
 // Project chat: the conversation with the project's coordinator, as the app's main view (header, scrolling
 // conversation, composer pinned at the bottom). Messages queue by default, so nothing typed while the coordinator is
 // busy interrupts it or gets lost; Steer redirects the running turn instead.
+/** Whether two texts say the same thing, ignoring quotes, punctuation, case and spacing. */
+const sameWords = (a: string, b: string) => {
+  const words = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return words(a) === words(b);
+};
+
 export function ProjectChat({
   projectId,
   onOpenThread,
@@ -216,7 +222,7 @@ function Conversation({
         </EmptyState>
       )}
       <MessageList>
-        {agent.messages.flatMap((m) => {
+        {agent.messages.flatMap((m, i) => {
           if (m.role === "user" && m.text.startsWith(UPDATE_PREFIX))
             return [
               <Message key={m.id} from="note">
@@ -238,6 +244,15 @@ function Conversation({
                 : []),
             ];
           }
+          // The coordinator often repeats a thread's update word for word; the note above already says it.
+          const before = agent.messages[i - 1];
+          if (
+            m.role === "assistant" &&
+            before?.role === "user" &&
+            before.text.startsWith(UPDATE_PREFIX) &&
+            sameWords(before.text.slice(UPDATE_PREFIX.length), m.text)
+          )
+            return [];
           if (m.role === "assistant")
             return [
               <Message key={m.id} from="agent" pending={!m.done}>

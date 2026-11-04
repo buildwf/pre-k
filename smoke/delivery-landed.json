@@ -50,5 +50,21 @@
   },
   {
     "waitText": "Checks passed"
+  },
+  {
+    "click": "View changes"
+  },
+  {
+    "waitText": "1 changed file",
+    "timeoutMs": 20000
+  },
+  {
+    "waitText": "README.md"
+  },
+  {
+    "click": "Back"
+  },
+  {
+    "waitText": "Checks passed"
   }
 ]

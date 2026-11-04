@@ -1,7 +1,9 @@
 import { defineRouter, procedure } from "point/app";
 import { connect, ConnectorError } from "point/connectors";
 import github from "../connectors/github.connector";
-import { ChecksRef, ChecksSummary, PullRequestCardData, PullRequestRef } from "../schemas/delivery";
+import { commitDiff } from "../lib/diff";
+import { checkoutPath } from "../lib/paths";
+import { ChecksRef, ChecksSummary, CommitDiff, CommitRef, PullRequestCardData, PullRequestRef } from "../schemas/delivery";
 
 // Review and delivery: what a thread produced, read live from GitHub. Window-only (no .tool()): the card shows
 // GitHub's answer, never what an agent claims about its PR.
@@ -51,5 +53,17 @@ export default defineRouter({
         if (e instanceof ConnectorError && (e.status === 404 || e.status === 422)) return fail("NOT_FOUND", input);
         throw e;
       }
+    }),
+
+  // What a landed commit changed (the diff view), read from pre-k's own clone, so it needs no GitHub call when the
+  // thread landed it from this machine.
+  commitDiff: procedure
+    .input(CommitRef)
+    .output(CommitDiff)
+    .errors({ NOT_FOUND: CommitRef })
+    .handler(async ({ input, connectors, fail }) => {
+      const diff = await commitDiff({ dir: checkoutPath(input.repo), sha: input.sha, token: await connectors.token("github") });
+
+      return diff ?? fail("NOT_FOUND", input);
     }),
 });
