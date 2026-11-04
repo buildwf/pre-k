@@ -337,8 +337,9 @@ function RepositoryField({
     >
       <Stack gap={8}>
         <Stack direction="row" gap={8} align="end">
-          <Field label="Repository" wide error={problem} hint={problem ? undefined : "owner/name or a GitHub link."}>
-            <TextField value={text} placeholder="buildwf/pre-k" onChange={(e) => setText(e.target.value)} />
+          {/* No hint under the field, so Link lines up with the box; the placeholder shows the shape it takes. */}
+          <Field label="Repository" wide error={problem}>
+            <TextField value={text} placeholder="owner/name or a GitHub link" onChange={(e) => setText(e.target.value)} />
           </Field>
           {onCancel && (
             <Button type="button" variant="quiet" onClick={onCancel}>

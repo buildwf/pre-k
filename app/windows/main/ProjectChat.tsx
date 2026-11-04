@@ -5,6 +5,7 @@ import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../../.point/components";
 import { ThreadPullRequest } from "../../lib/ThreadPullRequest";
 import { stateLabel } from "../../threads/labels";
+import { mentionMatches, mentionQuery, parseMention, pickMention, withMentions, type Mentionable } from "../../threads/mentions";
 import { UPDATE_PREFIX } from "../../threads/relay";
 import { quietLines, threadStart } from "../../threads/started";
 import { threadState } from "../../threads/state";
@@ -35,6 +36,12 @@ interface Frame {
 // Project chat: the conversation with the project's coordinator, as the app's main view (header, scrolling
 // conversation, composer pinned at the bottom). Messages queue by default, so nothing typed while the coordinator is
 // busy interrupts it or gets lost; Steer redirects the running turn instead.
+/** Whether two texts say the same thing, ignoring quotes, punctuation, case and spacing. */
+const sameWords = (a: string, b: string) => {
+  const words = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return words(a) === words(b);
+};
+
 export function ProjectChat({
   projectId,
   onOpenThread,
@@ -64,7 +71,7 @@ export function ProjectChat({
     };
   }, [projectId, attempt]);
 
-  if (threadId && !problem) return <Conversation threadId={threadId} onOpenThread={onOpenThread} {...frame} />;
+  if (threadId && !problem) return <Conversation projectId={projectId} threadId={threadId} onOpenThread={onOpenThread} {...frame} />;
 
   return (
     <>
@@ -111,16 +118,19 @@ const statusWords = {
 } as const;
 
 function Conversation({
+  projectId,
   threadId,
   onOpenThread,
   subtitle,
   actions,
   notice,
 }: Frame & {
+  projectId: string;
   threadId: string;
   onOpenThread?: ((threadId: string) => void) | undefined;
 }) {
   const agent = useAgent(threadId);
+  const mention = useMentions(projectId);
   const me = useRpc(rpc.coordinator.whoami, undefined);
   const [text, setText] = useState("");
   const [sendProblem, setSendProblem] = useState<string>();
@@ -137,8 +147,9 @@ function Conversation({
     else if (r.value === "rejected") setSendProblem("The coordinator couldn't take that message just now. Send it again.");
   };
   const submit = (turn: "queue" | "steer") => {
-    void send(text, turn);
+    void send(withMentions(text, mention.picked), turn);
     setText("");
+    mention.reset();
   };
   const steers = new Map<string, string>();
   let lastError: { id: string; message: string } | undefined;
@@ -174,7 +185,7 @@ function Conversation({
         </EmptyState>
       )}
       <MessageList>
-        {agent.messages.flatMap((m) => {
+        {agent.messages.flatMap((m, i) => {
           if (m.role === "user" && m.text.startsWith(UPDATE_PREFIX))
             return [
               <Message key={m.id} from="note">
@@ -185,7 +196,7 @@ function Conversation({
             const steer = steers.get(m.id);
             return [
               <Message key={m.id} from="you" pending={!m.done}>
-                {m.text}
+                <YourText text={m.text} />
               </Message>,
               ...(steer
                 ? [
@@ -196,6 +207,15 @@ function Conversation({
                 : []),
             ];
           }
+          // The coordinator often repeats a thread's update word for word; the note above already says it.
+          const before = agent.messages[i - 1];
+          if (
+            m.role === "assistant" &&
+            before?.role === "user" &&
+            before.text.startsWith(UPDATE_PREFIX) &&
+            sameWords(before.text.slice(UPDATE_PREFIX.length), m.text)
+          )
+            return [];
           if (m.role === "assistant")
             return [
               <Message key={m.id} from="agent" pending={!m.done}>
@@ -212,9 +232,17 @@ function Conversation({
           if ("started" in start)
             // The card is the record of the start, as in Claude Projects: no tool line above it.
             return [<StartedThread key={`${m.id}:thread`} threadId={start.started} onOpen={onOpenThread} />];
+          if ("followedUp" in start)
+            return [
+              <StartedThread key={`${m.id}:thread`} threadId={start.followedUp} onOpen={onOpenThread} followUp />,
+            ];
           return [
             line,
-            <Alert key={`${m.id}:failed`} tone="danger" title="The thread didn't start">
+            <Alert
+              key={`${m.id}:failed`}
+              tone="danger"
+              title={/\bthreads followUp\b/.test(JSON.stringify(m.input)) ? "The follow-up didn't reach the thread" : "The thread didn't start"}
+            >
               <Stack gap={8}>
                 <Text>{start.failed}</Text>
                 {asked && (
@@ -246,8 +274,11 @@ function Conversation({
           value={text}
           onChange={setText}
           onSubmit={() => submit("queue")}
+          suggestions={mention.suggestions(text, setText)}
           sendLabel={busy ? "Queue" : "Send"}
-          placeholder={busy ? "Queue a message for after this turn" : "Ask about the project, or hand off work"}
+          placeholder={
+            busy ? "Queue a message for after this turn" : "Ask about the project, hand off work, or @ a thread"
+          }
           hint={
             <>
               The coordinator {statusWords[agent.status]}
@@ -272,9 +303,12 @@ function Conversation({
 function StartedThread({
   threadId,
   onOpen,
+  followUp,
 }: {
   threadId: string;
   onOpen?: ((threadId: string) => void) | undefined;
+  /** The card for a follow-up sent to the thread (an @-mention), rather than for starting it. */
+  followUp?: boolean | undefined;
 }) {
   const threads = useCollection("threads");
   const outputs = useCollection("thread-outputs");
@@ -291,13 +325,17 @@ function StartedThread({
         <Stack direction="row" gap={8} align="center" justify="between">
           <Stack gap={4}>
             <Stack direction="row" gap={8} align="center">
-              <Text bold>Started a thread: {row.title}</Text>
+              <Text bold>
+                {followUp ? "Sent a follow-up to" : "Started a thread"}: {row.title}
+              </Text>
               <Badge tone={state.badge}>{state.text}</Badge>
             </Stack>
-            <Text tone="muted">
-              Asked by {row.requestedBy}
-              {row.branch ? ` · ${row.branch}` : ""}
-            </Text>
+            {!followUp && (
+              <Text tone="muted">
+                Asked by {row.requestedBy}
+                {row.branch ? ` · ${row.branch}` : ""}
+              </Text>
+            )}
           </Stack>
           {onOpen && (
             <Button size="sm" onClick={() => onOpen(threadId)}>
@@ -305,7 +343,7 @@ function StartedThread({
             </Button>
           )}
         </Stack>
-        {prs.map((o) =>
+        {!followUp && prs.map((o) =>
           o.kind === "pr" ? (
             <ThreadPullRequest key={o.id} repo={o.repo} number={o.number} />
           ) : (
@@ -315,4 +353,61 @@ function StartedThread({
       </Stack>
     </Card>
   );
+}
+
+/** The person's message, with an @-mentioned thread shown as its title in bold rather than as the raw token. */
+function YourText({ text }: { text: string }) {
+  const m = parseMention(text);
+  if (!m) return <>{text}</>;
+  return (
+    <>
+      {m.before ? `${m.before} ` : ""}
+      <Text bold>@{m.title}</Text> {m.rest.slice(m.before.length).trim()}
+    </>
+  );
+}
+
+/**
+ * The @-mention picker's state: the project's threads, the ones picked so far (so sending can turn `@Title` into the
+ * thread's token), the highlighted row, and an Escape that closes the list until the person types again.
+ */
+function useMentions(projectId: string) {
+  const threads = useCollection("threads");
+  const live = useThreads();
+  const { data: rows } = useLiveQuery((q) => q.from({ t: threads }).where(({ t }) => eq(t.projectId, projectId)));
+  const [picked, setPicked] = useState<Mentionable[]>([]);
+  const [active, setActive] = useState(0);
+  const [dismissed, setDismissed] = useState<string>();
+  const all = [...rows].sort((a, b) => b.updatedAt - a.updatedAt);
+
+  return {
+    picked,
+    reset() {
+      setPicked([]);
+      setActive(0);
+    },
+    suggestions(text: string, setText: (t: string) => void) {
+      const query = mentionQuery(text);
+      if (query === undefined || dismissed === text) return undefined;
+      const matches = mentionMatches(all, query);
+      const hint = (id: string) => {
+        const row = all.find((t) => t.threadId === id);
+        return row ? stateLabel[threadState(live.find((t) => t.id === id)?.status, row.endedAs, [], row.lastAttempt)].text : undefined;
+      };
+      return {
+        heading: matches.length ? "Send a follow-up to a thread" : "No thread matches",
+        items: matches.map((t) => ({ id: t.threadId, label: t.title, hint: hint(t.threadId) })),
+        active: Math.min(active, Math.max(matches.length - 1, 0)),
+        onActive: setActive,
+        onPick(id: string) {
+          const t = matches.find((m) => m.threadId === id);
+          if (!t) return;
+          setPicked((p) => [...p.filter((x) => x.threadId !== id), { threadId: t.threadId, title: t.title }]);
+          setText(pickMention(text, t));
+          setActive(0);
+        },
+        onDismiss: () => setDismissed(text),
+      };
+    },
+  };
 }

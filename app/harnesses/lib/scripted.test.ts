@@ -267,7 +267,11 @@ test("the coordinator starts a thread for a request and answers a question in te
     "threads start --title Add a README badge --request Add a README badge --requestedBy Zack --json",
   ]);
   expect(texts(events)).toContain("Started a thread for “Add a README badge”.");
-  expect(texts(events).at(-1)).toMatch(/^I'm the scripted coordinator/);
+  expect(texts(events).at(-1)).toMatch(/^I'm the \*\*scripted coordinator\*\*/);
+  // It streams: a few words at a time, then the whole reply once it is done.
+  const parts = events.flatMap((e) => (e.type === "text" && !e.done ? [e.text] : []));
+  expect(parts.length).toBeGreaterThan(3);
+  expect(parts.join("")).toBe(texts(events).at(-1));
   s.close();
 });
 
@@ -289,6 +293,20 @@ test("the coordinator asks for the name again after a crash, and never starts a 
   const events = await turnEnd(o, 2);
   expect(fs.readFileSync(cliLog, "utf8").trim().split("\n")).toEqual(["coordinator name", "coordinator name"]);
   expect(status(events)).toBe("failed");
+  s.close();
+});
+
+test("the coordinator sends an @-mentioned thread the rest of the message as a follow-up", async () => {
+  const o = start();
+  const s = await coordinatorHarness.start(o);
+  await s.send("@[Add a README badge](thread:t9) also add a CI badge", "start");
+  const events = await turnEnd(o);
+
+  expect(fs.readFileSync(cliLog, "utf8").trim().split("\n")).toEqual([
+    "coordinator name",
+    "threads followUp --threadId t9 --text also add a CI badge --by Zack --json",
+  ]);
+  expect(texts(events).at(-1)).toBe("Sent “Add a README badge” your follow-up.");
   s.close();
 });
 
