@@ -30,7 +30,7 @@ export function Delivered({ projectId, onOpen }: { projectId: string; onOpen: (t
           <Stack key={o.id} gap={4}>
             <Stack direction="row" justify="between" align="baseline" gap={8}>
               <Text tone="muted">From “{titles.get(o.threadId)}”</Text>
-              <Button variant="quiet" onClick={() => onOpen(o.threadId)}>
+              <Button variant="quiet" size="sm" onClick={() => onOpen(o.threadId)}>
                 Open thread
               </Button>
             </Stack>
