@@ -1,0 +1,11 @@
+[
+  {"call": "projects.create", "input": {"id": "steps", "name": "Steps"}},
+  {"call": "projects.open", "input": {"id": "steps"}},
+  {"call": "threads.start", "input": {"projectId": "steps", "title": "Read through the repo", "request": "/slow", "requestedBy": "Zack"}},
+  {"click": "Read through the repo"},
+  {"waitText": "Working: Reading"},
+  {"waitText": "All 10 steps done.", "timeoutMs": 20000},
+  {"waitText": "Read 10 files"},
+  {"click": "Read 10 files"},
+  {"waitText": "a file"}
+]

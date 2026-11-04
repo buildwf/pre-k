@@ -5,11 +5,12 @@ import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../.point/components";
 import { ThreadPullRequest } from "../lib/ThreadPullRequest";
 import { stateLabel } from "../threads/labels";
+import { groupTranscript, summarize } from "../threads/steps";
+import { WorkSteps } from "../ui/WorkSteps";
 import { failedAttempts, lastAttempt, threadState, type ThreadState } from "../threads/state";
 import { Alert } from "../ui/Alert";
 import { ApprovalPrompt } from "../ui/ApprovalPrompt";
 import { formatCost, threadCost } from "../lib/cost";
-import { toolLine } from "../threads/toolLine";
 import { Badge, type BadgeTone } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Composer } from "../ui/Composer";
@@ -153,13 +154,13 @@ export function ThreadView({ threadId }: { threadId: string }) {
   };
   const started = agent.messages.length > 0;
   const failed = failedAttempts(agent.events);
+  // Tool calls that ended in an error, by item id (a tool message's id is its item id).
+  const toolErrors = new Set(agent.events.flatMap((e) => (e.type === "tool.end" && e.isError ? [e.itemId] : [])));
+  // Runs of tool calls become live, collapsible steps (Cursor-style) between the messages around them.
+  const transcript = groupTranscript(agent.messages, toolErrors, row?.worktree);
   const latestAsked = agent.messages.findLast((m) => m.role === "user");
   const renderMessage = (m: (typeof agent.messages)[number]) =>
-    m.role === "tool" ? (
-            <Message key={m.id} from="tool" title={m.name ?? "tool"} pending={!m.done}>
-              {toolLine(m.name, m.input)}
-            </Message>
-          ) : m.role === "reasoning" ? (
+    m.role === "reasoning" ? (
             <Disclosure key={m.id} summary={m.done ? "Thinking" : "Thinking…"}>
               <Text tone="muted">{m.text}</Text>
             </Disclosure>
@@ -222,14 +223,20 @@ export function ThreadView({ threadId }: { threadId: string }) {
       {!retryable && <Text tone="muted">{state.help}</Text>}
       <Alert tone="danger">{problem}</Alert>
       <MessageList>
-        {agent.messages.flatMap((m, i) => {
+        {transcript.map((t, i) => {
+          if (t.item === "steps")
+            return <WorkSteps key={t.id} steps={t.steps} summary={summarize(t.steps)} running={t.running} />;
+          const m = t.message;
           // A failed attempt gets a note where it ended: before the next message, or at the end. The latest one, while it
           // can be retried, is the Alert below instead.
-          const asked = agent.messages.slice(0, i).findLast((p) => p.role === "user");
+          const asked = transcript
+            .slice(0, i)
+            .findLast((p) => p.item === "message" && p.message.role === "user");
+          const askedId = asked?.item === "message" ? asked.message.id : undefined;
           const note =
-            m.role === "user" && asked && failed.has(asked.id) ? (
-              <Message key={`failed-${asked.id}`} from="note">
-                {failed.get(asked.id)}
+            m.role === "user" && askedId && failed.has(askedId) ? (
+              <Message key={`failed-${askedId}`} from="note">
+                {failed.get(askedId)}
               </Message>
             ) : null;
           return [note, renderMessage(m)];
