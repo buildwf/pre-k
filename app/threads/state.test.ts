@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { callerThread, lastAttempt, outputKey, outputLabel, threadState } from "./state";
+import { callerThread, failedAttempts, lastAttempt, outputKey, outputLabel, threadState } from "./state";
 
 const pr = { kind: "pr", repo: "o/r", number: 1 } as const;
 const commit = { kind: "commit", repo: "o/r", sha: "abc1234", branch: "main" } as const;
@@ -84,5 +84,26 @@ describe("lastAttempt", () => {
   });
   it("is not failed while the latest request hasn't run yet", () => {
     expect(lastAttempt([user("a"), end("failed"), user("b")])).toEqual({ request: "b", failed: false });
+  });
+});
+
+describe("failedAttempts", () => {
+  it("keys each failed attempt by the message that asked for it", () => {
+    const events = [
+      { id: "u1", type: "user", text: "a", turn: "start" },
+      { id: "e1", type: "error", message: "boom" },
+      { id: "t1", type: "turn.end", turnId: "x", status: "failed" },
+      { id: "u2", type: "user", text: "a", turn: "queue" },
+      { id: "t2", type: "turn.end", turnId: "y", status: "completed" },
+      { id: "u3", type: "user", text: "b", turn: "queue" },
+      { id: "t3", type: "turn.end", turnId: "z", status: "interrupted" },
+      { id: "u4", type: "user", text: "c", turn: "queue" },
+      { id: "e4", type: "error", message: "missing key" },
+    ] as const;
+    expect([...failedAttempts(events)]).toEqual([
+      ["u1", "That attempt failed: boom"],
+      ["u3", "That attempt was interrupted."],
+      ["u4", "That attempt failed: missing key"],
+    ]);
   });
 });
