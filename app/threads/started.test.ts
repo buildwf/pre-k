@@ -31,3 +31,15 @@ describe("startedThread", () => {
     expect(threadStart(cmd, '{"code":"NO_PROJECT"}')).toEqual({ failed: '{"code":"NO_PROJECT"}' });
   });
 });
+
+describe("threadStart for a follow-up", () => {
+  const follow = { command: `"$POINT_CLI" threads followUp --threadId 't1' --text 'also a CI badge' --json` };
+
+  it("finds the thread a follow-up went to", () => {
+    expect(threadStart(follow, '{"reopened":true,"message":"queued"}')).toEqual({ followedUp: "t1" });
+  });
+
+  it("says why a follow-up failed", () => {
+    expect(threadStart(follow, "could not send the follow-up: NOT_A_THREAD")).toEqual({ failed: "NOT_A_THREAD" });
+  });
+});

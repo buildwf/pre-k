@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { ThreadLandedCommit } from "../lib/ThreadLandedCommit";
-import { z } from "zod";
 import { rpc, useAgent, useCollection, useThreads } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../.point/components";
 import { ThreadPullRequest } from "../lib/ThreadPullRequest";
 import { stateLabel } from "../threads/labels";
-import { lastAttempt, threadState, type ThreadState } from "../threads/state";
+import { failedAttempts, lastAttempt, threadState, type ThreadState } from "../threads/state";
 import { Alert } from "../ui/Alert";
 import { ApprovalPrompt } from "../ui/ApprovalPrompt";
 import { formatCost, threadCost } from "../lib/cost";
+import { toolLine } from "../threads/toolLine";
 import { Badge, type BadgeTone } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Composer } from "../ui/Composer";
@@ -152,6 +152,23 @@ export function ThreadView({ threadId }: { threadId: string }) {
     setProblem(r.ok ? undefined : r.failure.code);
   };
   const started = agent.messages.length > 0;
+  const failed = failedAttempts(agent.events);
+  const latestAsked = agent.messages.findLast((m) => m.role === "user");
+  const renderMessage = (m: (typeof agent.messages)[number]) =>
+    m.role === "tool" ? (
+            <Message key={m.id} from="tool" title={m.name ?? "tool"} pending={!m.done}>
+              {toolLine(m.name, m.input)}
+            </Message>
+          ) : m.role === "reasoning" ? (
+            <Disclosure key={m.id} summary={m.done ? "Thinking" : "Thinking…"}>
+              <Text tone="muted">{m.text}</Text>
+            </Disclosure>
+          ) : (
+            <Message key={m.id} from={m.role === "user" ? "you" : "agent"} pending={!m.done}>
+              {m.text}
+              {steers.has(m.id) && <Text tone="muted"> ({steers.get(m.id)})</Text>}
+            </Message>
+          );
 
   return (
     <>
@@ -201,8 +218,28 @@ export function ThreadView({ threadId }: { threadId: string }) {
         }
       />
       <PaneBody>
-      <Text tone="muted">{state.help}</Text>
-      {/* A failure comes first: it is what the person has to act on. */}
+      {/* The Retry alert says what to do when the last attempt failed; the help line would say it twice. */}
+      {!retryable && <Text tone="muted">{state.help}</Text>}
+      <Alert tone="danger">{problem}</Alert>
+      <MessageList>
+        {agent.messages.flatMap((m, i) => {
+          // A failed attempt gets a note where it ended: before the next message, or at the end. The latest one, while it
+          // can be retried, is the Alert below instead.
+          const asked = agent.messages.slice(0, i).findLast((p) => p.role === "user");
+          const note =
+            m.role === "user" && asked && failed.has(asked.id) ? (
+              <Message key={`failed-${asked.id}`} from="note">
+                {failed.get(asked.id)}
+              </Message>
+            ) : null;
+          return [note, renderMessage(m)];
+        })}
+        {latestAsked && failed.has(latestAsked.id) && !retryable && (
+          <Message key={`failed-${latestAsked.id}`} from="note">
+            {failed.get(latestAsked.id)}
+          </Message>
+        )}
+      </MessageList>
       <Alert tone="danger">
         {retryable && (
           <Stack direction="row" gap={8} align="center" justify="between" wrap>
@@ -213,28 +250,6 @@ export function ThreadView({ threadId }: { threadId: string }) {
           </Stack>
         )}
       </Alert>
-      <Alert tone="danger">{problem}</Alert>
-      <MessageList>
-        {agent.messages.map((m) =>
-          m.role === "tool" ? (
-            <Message key={m.id} from="tool" title={m.name ?? "tool"} pending={!m.done}>
-              {JSON.stringify(m.input)}
-              {m.done && m.output !== undefined
-                ? ` → ${z.string().safeParse(m.output).data ?? JSON.stringify(m.output)}`
-                : ""}
-            </Message>
-          ) : m.role === "reasoning" ? (
-            <Disclosure key={m.id} summary={m.done ? "Thinking" : "Thinking…"}>
-              <Text tone="muted">{m.text}</Text>
-            </Disclosure>
-          ) : (
-            <Message key={m.id} from={m.role === "user" ? "you" : "agent"} pending={!m.done}>
-              {m.text}
-              {steers.has(m.id) && <Text tone="muted"> ({steers.get(m.id)})</Text>}
-            </Message>
-          ),
-        )}
-      </MessageList>
       {/* Components the agent rendered (its summary); props were validated by the runtime before the ui event. */}
       {agent.ui.map((u) => (
         <div key={u.id}>{render(u)}</div>

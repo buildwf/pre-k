@@ -78,6 +78,14 @@ const s = stylex.create({
     whiteSpace: "nowrap",
   },
   itemMeta: { fontSize: text.xs, color: colors.mutedForeground, whiteSpace: "nowrap" },
+  shortcut: {
+    fontFamily: font.sans,
+    fontSize: text.xs,
+    color: colors.mutedForeground,
+    letterSpacing: "0.02em",
+    opacity: 0.7,
+    whiteSpace: "nowrap",
+  },
   empty: { paddingInline: space[2], fontSize: text.caption, color: colors.mutedForeground },
 });
 
@@ -141,6 +149,7 @@ export function SidebarItem({
   status,
   meta,
   detail,
+  shortcut,
   active,
   onClick,
   children,
@@ -151,6 +160,8 @@ export function SidebarItem({
   meta?: ReactNode;
   /** A second line under the label, in red: why a thread failed. */
   detail?: string | undefined;
+  /** The keyboard shortcut that opens it, as it reads ("⌘1") and as aria-keyshortcuts says it ("Meta+1"). */
+  shortcut?: { label: string; aria: string };
   active?: boolean;
   onClick?: () => void;
   children?: ReactNode;
@@ -160,6 +171,7 @@ export function SidebarItem({
       <button
         type="button"
         aria-current={active ? "page" : undefined}
+        aria-keyshortcuts={shortcut?.aria}
         onClick={onClick}
         {...stylex.props(s.item, active && s.active)}
       >
@@ -181,6 +193,11 @@ export function SidebarItem({
           <span {...stylex.props(s.itemText)}>{children}</span>
         )}
         {meta !== undefined && <span {...stylex.props(s.itemMeta)}>{meta}</span>}
+        {shortcut && (
+          <kbd aria-hidden {...stylex.props(s.shortcut)}>
+            {shortcut.label}
+          </kbd>
+        )}
       </button>
     </li>
   );

@@ -4,7 +4,9 @@ const command = z.object({ command: z.string() });
 const reply = z.object({ threadId: z.string().min(1), branch: z.string().optional() });
 
 /** What one coordinator tool call did about starting a thread. */
-export type ThreadStart = { started: string } | { failed: string };
+export type ThreadStart = { started: string } | { followedUp: string } | { failed: string };
+
+const followed = z.object({ reopened: z.boolean() });
 
 // Electron and Chromium log lines (`[123:1103/194030.4:ERROR:dbus/bus.cc:406] ...`) that say nothing about pre-k.
 const noise = /^\[\d+:\d+\/[\d.]+:(ERROR|WARNING|INFO):/;
@@ -16,14 +18,21 @@ const noise = /^\[\d+:\d+\/[\d.]+:(ERROR|WARNING|INFO):/;
  */
 export function threadStart(input: unknown, output: unknown): ThreadStart | undefined {
   const cmd = command.safeParse(input);
-  if (!cmd.success || !/\bthreads start\b/.test(cmd.data.command)) return undefined;
+  if (!cmd.success) return undefined;
+  // `threads followUp --threadId <id>` (an @-mention): the thread is named in the command, not the reply.
+  const follow = /\bthreads followUp\b/.test(cmd.data.command)
+    ? /--threadId[= ]+["']?([\w:.-]+)/.exec(cmd.data.command)?.[1]
+    : undefined;
+  if (!follow && !/\bthreads start\b/.test(cmd.data.command)) return undefined;
   const text = z.string().safeParse(output);
   if (!text.success) return undefined;
   const start = text.data.indexOf("{");
   if (start >= 0) {
     try {
-      const parsed = reply.safeParse(JSON.parse(text.data.slice(start)));
-      if (parsed.success) return { started: parsed.data.threadId };
+      const json: unknown = JSON.parse(text.data.slice(start));
+      if (follow && followed.safeParse(json).success) return { followedUp: follow };
+      const parsed = reply.safeParse(json);
+      if (!follow && parsed.success) return { started: parsed.data.threadId };
     } catch {
       // not the reply: report it as a failure below
     }
@@ -35,7 +44,7 @@ export function threadStart(input: unknown, output: unknown): ThreadStart | unde
 export function quietLines(text: string): string[] {
   return text
     .split("\n")
-    .map((l) => l.replace(/^could not start a thread:\s*/, "").trim())
+    .map((l) => l.replace(/^could not (start a thread|send the follow-up):\s*/, "").trim())
     .filter((l) => l && !noise.test(l));
 }
 

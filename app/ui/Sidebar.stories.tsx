@@ -13,10 +13,12 @@ export const Default = {
       }
     >
       <SidebarGroup>
-        <SidebarItem icon="chat" active>
+        <SidebarItem icon="chat" active shortcut={{ label: "⌘1", aria: "Meta+1" }}>
           Project chat
         </SidebarItem>
-        <SidebarItem icon="package">Delivered</SidebarItem>
+        <SidebarItem icon="package" shortcut={{ label: "⌘2", aria: "Meta+2" }}>
+          Delivered
+        </SidebarItem>
       </SidebarGroup>
       <SidebarGroup label="Threads">
         <SidebarItem status="working" meta="working">
