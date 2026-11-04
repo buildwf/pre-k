@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
-import { colors } from "sevenyears/src/tokens.stylex";
+import { colors } from "sevenyears/tokens.stylex";
 
 const styles = stylex.create({
   shell: {

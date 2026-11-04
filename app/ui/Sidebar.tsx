@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
-import { colors, font, motion, radius, space, text } from "sevenyears/src/tokens.stylex";
+import { colors, font, motion, radius, space, text } from "sevenyears/tokens.stylex";
 import { Icon, type IconName } from "./Icon";
 import { StatusDot, type StatusTone } from "./StatusDot";
 

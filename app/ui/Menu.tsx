@@ -7,8 +7,8 @@ import {
   DropdownMenuGroup,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "sevenyears/src/components/DropdownMenu";
-import { Button as SevenButton } from "sevenyears/src/components/Button";
+} from "sevenyears/components/DropdownMenu";
+import { Button as SevenButton } from "sevenyears/components/Button";
 import { Icon } from "./Icon";
 
 export interface MenuAction {

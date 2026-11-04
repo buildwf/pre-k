@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
-import { colors, radius, space, text } from "sevenyears/src/tokens.stylex";
+import { colors, radius, space, text } from "sevenyears/tokens.stylex";
 
 // sevenyears' Badge (rounded pill, xs medium type), with tones for status. Its own styles come after a caller's, so the
 // tones live here rather than on top of it.
