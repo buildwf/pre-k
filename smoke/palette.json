@@ -1,0 +1,19 @@
+[
+  { "type": "Name", "text": "Demo" },
+  { "click": "Create project" },
+  { "waitText": "Project chat" },
+  { "press": "Control+K" },
+  { "waitText": "Esc to close" },
+  { "type": "Search", "text": "harness" },
+  { "waitText": "Coding agent" },
+  { "press": "Enter" },
+  { "waitText": "New threads in this project run it" },
+  { "click": "Jump to…" },
+  { "type": "Search", "text": "dark" },
+  { "press": "Enter" },
+  { "expect": "settings.theme", "equals": "dark" },
+  { "click": "Jump to…" },
+  { "type": "Search", "text": "deliv" },
+  { "press": "Enter" },
+  { "waitText": "Everything this project's threads landed" }
+]

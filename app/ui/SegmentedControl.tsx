@@ -56,7 +56,7 @@ export function SegmentedControl<T extends string>({
       aria-disabled={disabled}
       onKeyDown={move}
       className="ui-control"
-      style={{ display: "inline-flex", padding: 2, gap: 2, background: color.hover }}
+      style={{ display: "inline-flex", alignSelf: "flex-start", padding: 2, gap: 2, background: color.hover }}
     >
       {options.map((o, i) => {
         const selected = o.value === value;

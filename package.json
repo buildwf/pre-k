@@ -25,6 +25,7 @@
     "@base-ui/react": "^1.9.0",
     "@stylexjs/stylex": "^0.19.1",
     "@stylexjs/unplugin": "^0.19.1",
+    "cmdk": "^1.1.1",
     "point": "link:../cloudflare-point",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

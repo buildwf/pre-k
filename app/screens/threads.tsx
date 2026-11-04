@@ -52,16 +52,8 @@ const short = (message: string | undefined) => {
   return line && line.length > 80 ? `${line.slice(0, 79)}…` : line || undefined;
 };
 
-/** A project's threads in the sidebar, newest activity first: each with its state as a dot and in words. */
-export function ThreadNav({
-  projectId,
-  open,
-  onOpen,
-}: {
-  projectId: string;
-  open?: string | undefined;
-  onOpen: (threadId: string) => void;
-}) {
+/** A project's threads, newest activity first, each with its state and, for a failed one, why in a few words. */
+export function useProjectThreads(projectId: string) {
   const threads = useCollection("threads");
   const outputs = useCollection("thread-outputs");
   const live = useThreads();
@@ -74,27 +66,44 @@ export function ThreadNav({
   const { data: produced } = useLiveQuery((q) => q.from({ o: outputs }));
   const statusOf = new Map(live.map((t) => [t.id, t.status]));
 
+  return rows.map((t) => {
+    const state = threadState(
+      statusOf.get(t.threadId),
+      t.endedAs,
+      produced.filter((o) => o.threadId === t.threadId),
+      t.lastAttempt,
+    );
+    // Why it failed, in a few words, so a list says what went wrong without opening the thread.
+    const why = state === "failed" && !t.endedAs ? short(t.lastAttempt?.message) : undefined;
+    return { threadId: t.threadId, title: t.title, state, why };
+  });
+}
+
+/** A project's threads in the sidebar, with a dot for each one's state. */
+export function ThreadNav({
+  projectId,
+  open,
+  onOpen,
+}: {
+  projectId: string;
+  open?: string | undefined;
+  onOpen: (threadId: string) => void;
+}) {
+  const rows = useProjectThreads(projectId);
+
   return (
     <SidebarGroup label="Threads" empty="Ask in the project chat and the coordinator starts a thread for the work.">
-      {rows.map((t) => {
-        const state = threadState(
-          statusOf.get(t.threadId),
-          t.endedAs,
-          produced.filter((o) => o.threadId === t.threadId),
-          t.lastAttempt,
-        );
-        // Why it failed, in a few words, so the list says what went wrong without opening the thread.
-        const why = state === "failed" && !t.endedAs ? short(t.lastAttempt?.message) : undefined;
+      {rows.map(({ threadId, title, state, why }) => {
         return (
           <SidebarItem
-            key={t.threadId}
+            key={threadId}
             status={stateLabel[state].dot}
             meta={why ? undefined : stateLabel[state].text}
             detail={why ? `failed: ${why}` : undefined}
-            active={open === t.threadId}
-            onClick={() => onOpen(t.threadId)}
+            active={open === threadId}
+            onClick={() => onOpen(threadId)}
           >
-            {t.title}
+            {title}
           </SidebarItem>
         );
       })}

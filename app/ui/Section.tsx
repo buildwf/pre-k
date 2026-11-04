@@ -20,6 +20,9 @@ const s = stylex.create({
   description: { fontSize: text.caption, color: colors.mutedForeground, lineHeight: 1.45 },
 });
 
+/** The id a Section's element gets from its title ("Coding agent" → "section-coding-agent"), to scroll to it. */
+export const sectionId = (title: string) => `section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
 /**
  * One titled part of a settings page or a side panel (Repository, Instructions, Memory), divided from the next by a
  * hairline. `action` sits at the end of the title row (Edit, an icon Button). `compact` for the narrow right panel.
@@ -40,7 +43,7 @@ export function Section({
   children?: ReactNode;
 }) {
   return (
-    <section {...stylex.props(s.section, compact && s.compact)}>
+    <section id={sectionId(title)} aria-label={title} {...stylex.props(s.section, compact && s.compact)}>
       <div {...stylex.props(s.head)}>
         <div {...stylex.props(s.titles)}>
           <h2 {...stylex.props(s.title)}>{title}</h2>

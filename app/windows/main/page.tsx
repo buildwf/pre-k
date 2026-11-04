@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Palette, type Destination } from "../../screens/palette";
 import { aria, label, matches, shortcuts, type Shortcut } from "../../lib/shortcuts";
 import { ProjectPanel } from "../../screens/panel";
 import { CommitView } from "../../screens/commit";
@@ -7,14 +8,14 @@ import { OpenCommitContext } from "../../lib/navigation";
 import type { CommitRef } from "../../schemas/delivery";
 import type { z } from "zod";
 import { GitHub } from "../../screens/github";
-import { YourName } from "../../screens/you";
+import { Appearance, YourName } from "../../screens/you";
 import { Memory, ProjectSettings, Projects, ProjectSwitcher } from "../../screens/projects";
 import { ThreadNav, ThreadView } from "../../screens/threads";
 import { AppShell } from "../../ui/AppShell";
 import { Button } from "../../ui/Button";
 import { Icon } from "../../ui/Icon";
 import { PaneBody, PaneHeader } from "../../ui/Pane";
-import { Section } from "../../ui/Section";
+import { Section, sectionId } from "../../ui/Section";
 import { Sidebar, SidebarGroup, SidebarItem } from "../../ui/Sidebar";
 import { Window } from "../../ui/Window";
 import { ProjectChat } from "./ProjectChat";
@@ -40,12 +41,21 @@ export default function Page() {
 function Workspace({ project, projects, newProject, notice }: Parameters<Parameters<typeof Projects>[0]["children"]>[0]) {
   const [view, setView] = useState<View>({ kind: "chat" });
   const [panel, setPanel] = useState(true);
+  const [palette, setPalette] = useState(false);
+  const go = (to: Destination) => {
+    if (to.kind !== "settings") return setView(to);
+    setView({ kind: "settings" });
+    const section = to.section;
+    // A settings section the palette asked for: scrolled to on the next frame, once the settings view has rendered.
+    if (section) requestAnimationFrame(() => document.getElementById(sectionId(section))?.scrollIntoView({ block: "start" }));
+  };
   const openThread = (threadId: string) => setView({ kind: "thread", threadId });
   const openCommit = (c: z.infer<typeof CommitRef>) =>
     setView((v) => ({ kind: "commit", ...c, back: v.kind === "commit" ? v.back : v }));
-  // Keyboard first, like Cursor and Linear: ⌘1 chat, ⌘2 Delivered, ⌘, settings, ⌘\\ the panel, ⇧⌘N a new project.
+  // Keyboard first, like Cursor and Linear: ⌘K the palette, ⌘1 chat, ⌘2 Delivered, ⌘, settings, ⌘\\ the panel, ⇧⌘N a new project.
   useEffect(() => {
     const actions: [Shortcut, () => void][] = [
+      [shortcuts.palette, () => setPalette((open) => !open)],
       [shortcuts.chat, () => setView({ kind: "chat" })],
       [shortcuts.delivered, () => setView({ kind: "delivered" })],
       [shortcuts.settings, () => setView({ kind: "settings" })],
@@ -79,6 +89,15 @@ function Workspace({ project, projects, newProject, notice }: Parameters<Paramet
 
   return (
     <OpenCommitContext.Provider value={openCommit}>
+    <Palette
+      open={palette}
+      onOpenChange={setPalette}
+      project={project}
+      projects={projects}
+      go={go}
+      newProject={newProject}
+      mac={mac}
+    />
     <AppShell
       sidebar={
         <Sidebar
@@ -97,6 +116,9 @@ function Workspace({ project, projects, newProject, notice }: Parameters<Paramet
           }
         >
           <SidebarGroup>
+            <SidebarItem icon="search" shortcut={keys(shortcuts.palette)} onClick={() => setPalette(true)}>
+              Jump to…
+            </SidebarItem>
             <SidebarItem
               icon="chat"
               active={view.kind === "chat"}
@@ -150,6 +172,9 @@ function Workspace({ project, projects, newProject, notice }: Parameters<Paramet
               <GitHub project={project} link={false} />
             </Section>
             <ProjectSettings project={project} />
+            <Section title="Appearance" description="Light, dark, or the same as your system.">
+              <Appearance />
+            </Section>
             <Section title="You">
               <YourName />
             </Section>

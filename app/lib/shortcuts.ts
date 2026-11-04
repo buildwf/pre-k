@@ -3,6 +3,7 @@
  * "Mod" is Command on a Mac and Control elsewhere.
  */
 export const shortcuts = {
+  palette: "Mod+K",
   chat: "Mod+1",
   delivered: "Mod+2",
   settings: "Mod+,",

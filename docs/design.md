@@ -27,8 +27,24 @@ One window, three columns (`AppShell`):
 | Main | `PaneHeader`, `PaneBody`, `PaneFooter` | The open view: project chat, a thread, Delivered, or Project settings. The header has the title, a `Badge`, a muted subtitle and actions; the body is a centered 736px reading column that scrolls; the footer holds the `Composer` |
 | Panel, 320px | `Section compact` | Beside the project chat only: the project's instructions (Edit opens settings) and memory. Toggled from the chat header |
 
-Project settings is a view, not a disclosure: one `Section` per topic (GitHub, Repository, General, Memory, You),
-divided by hairlines. New settings (the builder harness picker, for example) are another `Section` there.
+Project settings is a view, not a disclosure: one `Section` per topic (GitHub, Repository, General, Coding agent,
+Memory, Appearance, You), divided by hairlines. New settings are another `Section` there; add its title and search words
+to `settingSections` in `app/screens/palette.tsx` so ⌘K finds it (each Section's id comes from its title, `sectionId`).
+
+## Keyboard
+
+Shortcuts live in `app/lib/shortcuts.ts` (Mod is ⌘ on a Mac, Ctrl elsewhere): ⌘K the palette, ⌘1 Project chat,
+⌘2 Delivered, ⌘, settings, ⌘\ the project panel, ⇧⌘N a new project. A sidebar item shows its shortcut with
+`SidebarItem shortcut`. The palette (`CommandPalette`, cmdk in a Base UI dialog) jumps to a view, a thread, another
+project or a settings section, and switches the appearance; a new place to go belongs in it. `smoke/palette.json`
+drives it.
+
+## Light and dark
+
+Every color is a sevenyears token defined with `light-dark()`, so a screen gets dark mode by using tokens and nothing
+else: never a hex value or an `@media (prefers-color-scheme)` in a screen. The Appearance setting (System, Light,
+Dark) is the settings store's `theme`, which Point applies to every window. Check both: `bunx point smoke
+--color-scheme dark`.
 
 ## Components to use
 
