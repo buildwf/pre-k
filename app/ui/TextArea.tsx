@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { Textarea } from "sevenyears/src/components/Textarea";
+import { Textarea } from "sevenyears/components/Textarea";
 import { useNamedControl } from "./Field";
 
 /**

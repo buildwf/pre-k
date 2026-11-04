@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { colors, radius, text } from "sevenyears/src/tokens.stylex";
+import { colors, radius, text } from "sevenyears/tokens.stylex";
 
 const s = stylex.create({
   mark: {

@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { Input } from "sevenyears/src/components/Input";
+import { Input } from "sevenyears/components/Input";
 import { useNamedControl } from "./Field";
 
 /**

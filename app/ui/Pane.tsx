@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
-import { colors, space, text } from "sevenyears/src/tokens.stylex";
+import { colors, space, text } from "sevenyears/tokens.stylex";
 
 const s = stylex.create({
   header: {

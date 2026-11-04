@@ -8,10 +8,10 @@ style anything themselves.
 ## How sevenyears gets into the app
 
 - `package.json` depends on `sevenyears` as `file:vendor/sevenyears`, a git submodule pinned to one sevenyears commit, so its main can't break pre-k. `sh scripts/start.sh` checks it out. To take a newer sevenyears: `git -C vendor/sevenyears fetch && git -C vendor/sevenyears checkout <commit>`, fix pre-k against it, `bun install`, `bun run verify`, and commit the submodule with the fix.
-  After pulling sevenyears, run `bun install` again: a `file:` dependency is a copy.
+  After moving `vendor/sevenyears`, run `bun install` again: a `file:` dependency is a copy.
 - `point.vite.ts` adds the StyleX plugin to the renderer build and keeps one React, StyleX and Base UI. `.storybook/main.ts`
   reuses it, so stories render the same.
-- `app/ui/` imports sevenyears by path (`sevenyears/src/components/Button`, `sevenyears/src/tokens.stylex`).
+- `app/ui/` imports sevenyears through its exported subpaths (`sevenyears/components/Button`), never `sevenyears/src/`. Tokens are the one exception in spelling: StyleX reads variables only from an import ending in `.stylex`, so import `sevenyears/tokens.stylex`, which `point.vite.ts` (StyleX `aliases` and Vite `resolve.alias`) and tsconfig `paths` point at the exported `sevenyears/tokens`. This needs sevenyears at bdcb5f0 or later (its exports map).
 - `app/ui/kit.css` carries the same palette as CSS variables (`--ui-*`), for the kit components that aren't on StyleX
   yet. Geist and Geist Mono are bundled in `app/ui/fonts/` (OFL).
 - **Anything `app/components/` imports must not use StyleX** (today: `Card`, `Text`). Point loads agent components
@@ -47,7 +47,7 @@ divided by hairlines. New settings (the builder harness picker, for example) are
 
 ## Tokens
 
-From `sevenyears/src/tokens.stylex.ts`: colors (`background`, `foreground`, `muted`, `mutedForeground`, `accent`,
+From `sevenyears/tokens.stylex`: colors (`background`, `foreground`, `muted`, `mutedForeground`, `accent`,
 `border`, `primary` #7c3aed, `success`, `warning`, `destructive`, `sidebar`), space on a 4px grid, radius `sm` 6 /
 `md` 8 / `lg` 12, type `xs` 12 / `caption` 13 / `sm` 14 / `base` 16, motion `fast` 120ms and `glide` 220ms. Body text
 in the app is 14px. Spacing: 8 between controls in a row, 12 to 16 between blocks, 24 around a pane's content.
