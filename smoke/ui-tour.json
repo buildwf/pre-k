@@ -6,7 +6,7 @@
   { "type": "Message the coordinator", "text": "Add a README badge" },
   { "press": "Enter" },
   { "waitText": "Started a thread: Add a README badge" },
-  { "waitText": "finished its turn without landing any work." },
+  { "waitText": "failed: could not commit" },
   { "click": "Add a README badge" },
   { "waitText": "could not commit" },
   { "click": "Project settings" },

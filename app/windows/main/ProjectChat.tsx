@@ -93,6 +93,12 @@ export function ProjectChat({
   );
 }
 
+/** A reason as a sentence: capitalized, ending in a period. */
+function sentence(text: string): string {
+  const t = text.trim();
+  return `${t.charAt(0).toUpperCase()}${t.slice(1)}${/[.!?]$/.test(t) ? "" : "."}`;
+}
+
 /** What the coordinator's status means to the person, in a few words. */
 const statusWords = {
   starting: "is starting",
@@ -204,7 +210,8 @@ function Conversation({
           );
           if (!start) return [line];
           if ("started" in start)
-            return [line, <StartedThread key={`${m.id}:thread`} threadId={start.started} onOpen={onOpenThread} />];
+            // The card is the record of the start, as in Claude Projects: no tool line above it.
+            return [<StartedThread key={`${m.id}:thread`} threadId={start.started} onOpen={onOpenThread} />];
           return [
             line,
             <Alert key={`${m.id}:failed`} tone="danger" title="The thread didn't start">
@@ -227,8 +234,8 @@ function Conversation({
       <ApprovalPrompt pending={agent.pending} onDecide={agent.approve} />
       {lastError && (
         <Alert tone="danger" title="The coordinator hit a problem">
-          {quietLines(lastError.message).at(0) ?? "It stopped without saying why."} Send your message again, or
-          rephrase it.
+          {sentence(quietLines(lastError.message).at(0) ?? "It stopped without saying why")} Send your message again,
+          or rephrase it.
         </Alert>
       )}
       {sendProblem && <Alert tone="danger">{sendProblem}</Alert>}
@@ -276,7 +283,7 @@ function StartedThread({
   const { data: prs } = useLiveQuery((q) => q.from({ o: outputs }).where(({ o }) => eq(o.threadId, threadId)));
   const row = rows[0];
   if (!row) return null;
-  const state = stateLabel[threadState(live.find((t) => t.id === threadId)?.status, row.endedAs, prs)];
+  const state = stateLabel[threadState(live.find((t) => t.id === threadId)?.status, row.endedAs, prs, row.lastAttempt)];
 
   return (
     <Card>
