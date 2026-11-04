@@ -7,6 +7,8 @@ export interface RelayThread {
   projectId: string;
   title: string;
   endedAs?: EndedAs | undefined;
+  /** The latest attempt, so a turn that failed reads as failed (with why), not as finished. */
+  lastAttempt?: { failed: boolean; message?: string | undefined } | undefined;
   /** What it delivered: PRs and landed commits. */
   prs: (OutputLike & { url?: string | undefined })[];
 }
@@ -43,7 +45,7 @@ export function createRelay() {
   return (threads: RelayThread[], status: Map<string, ThreadStatus>, opts: { seed?: boolean } = {}) => {
     const notes: RelayNote[] = [];
     for (const t of threads) {
-      const state = threadState(status.get(t.threadId), t.endedAs, t.prs);
+      const state = threadState(status.get(t.threadId), t.endedAs, t.prs, t.lastAttempt);
       const key = `${state}|${t.prs.map(outputLabel).join(",")}`;
       const before = seen.get(t.threadId);
       const worked = (before?.worked ?? false) || state === "working" || Boolean(t.endedAs) || Boolean(opts.seed);
@@ -53,14 +55,26 @@ export function createRelay() {
         t.prs.filter((p) => p.kind === kind).map((p) => p.url ?? outputLabel(p)).join(", ");
       const prs = list("pr");
       const commits = list("commit");
+      const why = state === "failed" && !t.endedAs ? reason(t.lastAttempt?.message) : "";
       notes.push({
         projectId: t.projectId,
         threadId: t.threadId,
-        text: `${UPDATE_PREFIX} "${t.title}" ${words[state]}.${prs ? ` PR: ${prs}.` : ""}${commits ? ` Commit: ${commits}.` : ""}`,
+        text: `${UPDATE_PREFIX} "${t.title}" ${words[state]}${why ? `: ${why}` : ""}.${prs ? ` PR: ${prs}.` : ""}${commits ? ` Commit: ${commits}.` : ""}`,
       });
     }
     return notes;
   };
+}
+
+/** The first line of a failure, without a trailing period, at most 120 characters. */
+function reason(message: string | undefined): string {
+  const line = (message ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/[.:\s]+$/, "");
+  return line.length > 120 ? `${line.slice(0, 119)}…` : line;
 }
 
 /** A note waiting for its coordinator. */
@@ -72,22 +86,26 @@ export interface HeldNote {
 
 /**
  * Notes wait while their coordinator is mid-turn, so a thread update lands after the coordinator's own reply rather
- * than racing it (project chat showed the two in either order). A coordinator Point doesn't list gets its notes now.
+ * than racing it (project chat showed the two in either order). They also wait `settleMs` after the thread's latest
+ * change, and a newer note for the same thread replaces the held one: a thread at rest reads "finished" a moment
+ * before its failed attempt is recorded, and only the second is true. A coordinator Point doesn't list isn't busy.
  */
-export function createOutbox() {
-  const held: HeldNote[] = [];
+export function createOutbox(settleMs = 1500) {
+  let held: (HeldNote & { at: number })[] = [];
   return {
-    hold(note: HeldNote) {
-      held.push(note);
+    settleMs,
+    hold(note: HeldNote, now: number) {
+      held = [...held.filter((n) => n.threadId !== note.threadId), { ...note, at: now }];
     },
-    take(status: ReadonlyMap<string, ThreadStatus>): HeldNote[] {
+    take(status: ReadonlyMap<string, ThreadStatus>, now: number): HeldNote[] {
       const busy = (id: string) => {
         const s = status.get(id);
         return s === "starting" || s === "running" || s === "parked" || s === "paused";
       };
-      const ready = held.filter((n) => !busy(n.coordinator));
-      held.splice(0, held.length, ...held.filter((n) => busy(n.coordinator)));
-      return ready;
+      const due = (n: HeldNote & { at: number }) => now - n.at >= settleMs && !busy(n.coordinator);
+      const ready = held.filter(due);
+      held = held.filter((n) => !due(n));
+      return ready.map(({ coordinator, threadId, text }) => ({ coordinator, threadId, text }));
     },
   };
 }
