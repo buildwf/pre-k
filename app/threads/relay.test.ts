@@ -52,20 +52,38 @@ describe("relay", () => {
   });
 });
 
+describe("relay failures", () => {
+  it("says a thread whose latest attempt failed failed, and why", () => {
+    const relay = createRelay();
+    relay([t()], s("running"));
+    const notes = relay([t({ lastAttempt: { failed: true, message: "could not commit:\nnothing to commit." } })], s("idle"));
+    expect(notes.map((n) => n.text)).toEqual(['Thread update: "Add badge" failed: could not commit: nothing to commit.']);
+  });
+});
+
 describe("outbox", () => {
   const note = { coordinator: "c1", threadId: "t1", text: "Thread update: done" };
+  const idle = new Map([["c1", "idle" as const]]);
 
   it("holds a note while the coordinator is mid-turn and sends it once it's idle", () => {
-    const outbox = createOutbox();
-    outbox.hold(note);
-    expect(outbox.take(new Map([["c1", "running"]]))).toEqual([]);
-    expect(outbox.take(new Map([["c1", "idle"]]))).toEqual([note]);
-    expect(outbox.take(new Map([["c1", "idle"]]))).toEqual([]);
+    const outbox = createOutbox(100);
+    outbox.hold(note, 0);
+    expect(outbox.take(new Map([["c1", "running"]]), 200)).toEqual([]);
+    expect(outbox.take(idle, 200)).toEqual([note]);
+    expect(outbox.take(idle, 300)).toEqual([]);
   });
 
-  it("sends at once to a coordinator Point doesn't list", () => {
-    const outbox = createOutbox();
-    outbox.hold(note);
-    expect(outbox.take(new Map())).toEqual([note]);
+  it("waits for the thread to settle, and sends only its latest note", () => {
+    const outbox = createOutbox(100);
+    outbox.hold({ ...note, text: "Thread update: finished" }, 0);
+    outbox.hold({ ...note, text: "Thread update: failed" }, 50);
+    expect(outbox.take(idle, 120)).toEqual([]);
+    expect(outbox.take(idle, 150)).toEqual([{ ...note, text: "Thread update: failed" }]);
+  });
+
+  it("sends to a coordinator Point doesn't list", () => {
+    const outbox = createOutbox(0);
+    outbox.hold(note, 0);
+    expect(outbox.take(new Map(), 0)).toEqual([note]);
   });
 });

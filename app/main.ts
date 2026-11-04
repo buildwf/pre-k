@@ -30,15 +30,17 @@ export default defineMain({
         projectId: t.projectId,
         title: t.title,
         endedAs: t.endedAs,
+        lastAttempt: t.lastAttempt,
         prs: outputs.filter((o) => o.threadId === t.threadId),
       }));
       const notes = relay(threads, status, { seed: !seeded });
       seeded = true;
       for (const n of notes) {
         const coordinator = stores.get("coordinators").threads[n.projectId];
-        if (coordinator) outbox.hold({ coordinator, threadId: n.threadId, text: n.text });
+        if (coordinator) outbox.hold({ coordinator, threadId: n.threadId, text: n.text }, Date.now());
       }
-      for (const n of outbox.take(status))
+      if (notes.length) setTimeout(() => void tick(), outbox.settleMs + 50);
+      for (const n of outbox.take(status, Date.now()))
         await rpc.call("agents.send", { threadId: n.coordinator, text: n.text, turn: "queue", by: `thread:${n.threadId}` });
     };
 
