@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { ProjectPanel } from "../../screens/panel";
+import { CommitView } from "../../screens/commit";
 import { Delivered } from "../../screens/delivered";
+import { OpenCommitContext } from "../../lib/navigation";
+import type { CommitRef } from "../../schemas/delivery";
+import type { z } from "zod";
 import { GitHub } from "../../screens/github";
 import { YourName } from "../../screens/you";
 import { Memory, ProjectSettings, Projects, ProjectSwitcher } from "../../screens/projects";
@@ -15,7 +19,12 @@ import { Window } from "../../ui/Window";
 import { ProjectChat } from "./ProjectChat";
 
 /** What the middle column shows. The project chat is home; a thread, Delivered and Settings open from the sidebar. */
-type View = { kind: "chat" } | { kind: "thread"; threadId: string } | { kind: "delivered" } | { kind: "settings" };
+type View =
+  | { kind: "chat" }
+  | { kind: "thread"; threadId: string }
+  | { kind: "delivered" }
+  | { kind: "settings" }
+  | (z.infer<typeof CommitRef> & { kind: "commit"; back: Exclude<View, { kind: "commit" }> });
 
 export default function Page() {
   return (
@@ -29,6 +38,8 @@ function Workspace({ project, projects, newProject, notice }: Parameters<Paramet
   const [view, setView] = useState<View>({ kind: "chat" });
   const [panel, setPanel] = useState(true);
   const openThread = (threadId: string) => setView({ kind: "thread", threadId });
+  const openCommit = (c: z.infer<typeof CommitRef>) =>
+    setView((v) => ({ kind: "commit", ...c, back: v.kind === "commit" ? v.back : v }));
   const repo = project.repo ? `${project.repo} · ${project.defaultBranch ?? "default branch"}` : "No repository linked";
   const panelToggle = (
     <Button
@@ -43,6 +54,7 @@ function Workspace({ project, projects, newProject, notice }: Parameters<Paramet
   );
 
   return (
+    <OpenCommitContext.Provider value={openCommit}>
     <AppShell
       sidebar={
         <Sidebar
@@ -105,6 +117,10 @@ function Workspace({ project, projects, newProject, notice }: Parameters<Paramet
           </PaneBody>
         </>
       )}
+      {view.kind === "commit" && (
+        <CommitView key={view.sha} repo={view.repo} sha={view.sha} onBack={() => setView(view.back)} />
+      )}
     </AppShell>
+    </OpenCommitContext.Provider>
   );
 }

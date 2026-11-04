@@ -1,5 +1,6 @@
 import type { ChecksSummary } from "../schemas/delivery";
 import { Badge, type BadgeTone } from "./Badge";
+import { Button } from "./Button";
 import { Card } from "./Card";
 import { Icon } from "./Icon";
 import { Stack } from "./Stack";
@@ -26,6 +27,7 @@ export function LandedCommitCard({
   sha,
   title,
   checks,
+  onViewChanges,
 }: {
   repo: string;
   branch: string;
@@ -34,6 +36,8 @@ export function LandedCommitCard({
   title?: string | undefined;
   /** The commit's checks as GitHub reports them now; leave out while they load. */
   checks?: ChecksSummary | undefined;
+  /** Opens the commit's diff inside the app; without it the card only links to GitHub. */
+  onViewChanges?: (() => void) | undefined;
 }) {
   const failing = checks?.checks.filter((c) => c.state === "failure").map((c) => c.name) ?? [];
 
@@ -51,6 +55,12 @@ export function LandedCommitCard({
           <Text tone="muted">
             Landed on {branch} · <Text mono>{sha.slice(0, 7)}</Text> · {repo}
           </Text>
+          <Stack direction="row" gap={8} align="center">
+            {onViewChanges && (
+              <Button size="sm" onClick={onViewChanges}>
+                View changes
+              </Button>
+            )}
           <a
             href={`https://github.com/${repo}/commit/${sha}`}
             target="_blank"
@@ -59,6 +69,7 @@ export function LandedCommitCard({
           >
             Open on GitHub <Icon name="external" size={14} />
           </a>
+          </Stack>
         </Stack>
         {failing.length > 0 && <Text tone="danger">Failing: {failing.join(", ")}</Text>}
       </Stack>
