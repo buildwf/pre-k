@@ -92,3 +92,33 @@ export function lastAttempt(events: readonly ThreadEventBody[]): {
   const failed = ended ? ended !== "completed" : message !== undefined && at >= 0;
   return { ...(request !== undefined ? { request } : {}), failed, ...(failed && message ? { message } : {}) };
 }
+
+/**
+ * Every attempt that failed, keyed by the id of the message that asked for it (a user message's id is its event id):
+ * a turn that ended `failed` or `interrupted`, or an error with no turn before the next message (the harness never
+ * started). The value says why, for a note in the transcript.
+ */
+export function failedAttempts(events: readonly (ThreadEventBody & { id: string })[]): Map<string, string> {
+  const failed = new Map<string, string>();
+  let asked: string | undefined;
+  let error: string | undefined;
+  let ended = false;
+  const close = () => {
+    if (asked && !ended && error) failed.set(asked, `That attempt failed: ${error}`);
+  };
+  for (const e of events) {
+    if (e.type === "user") {
+      close();
+      asked = e.id;
+      error = undefined;
+      ended = false;
+    } else if (e.type === "error") error = e.message;
+    else if (e.type === "turn.end") {
+      if (asked && e.status !== "completed")
+        failed.set(asked, error ? `That attempt failed: ${error}` : `That attempt was ${e.status}.`);
+      ended = true;
+    }
+  }
+  close();
+  return failed;
+}
