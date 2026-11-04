@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { HarnessSession, HarnessStart } from "point/app";
+import { parseMention } from "../../threads/mentions";
 
 /**
  * The scripted harnesses behind `PREK_HARNESS=scripted` (#17): the coordinator and builder do the first journey's real
@@ -21,6 +22,9 @@ export const commands = {
     `n="$("$POINT_CLI" coordinator name)"; [ -n "$n" ] || n="$("$POINT_CLI" coordinator name)"; ` +
     `[ -n "$n" ] || { echo "pre-k couldn't say who asked; ask again" >&2; exit 1; }; ` +
     `exec "$POINT_CLI" threads start --title ${sh(title)} --request ${sh(request)} --requestedBy "$n" --json`,
+  /** An @-mentioned thread gets the rest of the message as a follow-up (reopened if it had finished). */
+  followUp: (threadId: string, text: string) =>
+    `n="$("$POINT_CLI" coordinator name)"; exec "$POINT_CLI" threads followUp --threadId ${sh(threadId)} --text ${sh(text)} \${n:+--by "$n"} --json`,
 };
 
 /** Quote one shell argument. */
@@ -70,6 +74,8 @@ const RESUME = "Continue where you left off";
 export interface Turn {
   text: string;
   say(text: string): Promise<void>;
+  /** Say it a few words at a time, as a model streams its reply. */
+  stream(text: string): Promise<void>;
   bash(command: string): Promise<{ code: number; out: string }>;
   stopped(): boolean;
   steers: string[];
@@ -125,6 +131,15 @@ export function scriptedSession(
         if (t.stopped()) return;
 
         o.onEvent({ type: "text", itemId: randomUUID(), text: s, done: true });
+      },
+      async stream(s) {
+        const itemId = randomUUID();
+        const words = s.split(/(?<=\s)/);
+        for (let i = 0; i < words.length && !t.stopped(); i += 3) {
+          o.onEvent({ type: "text", itemId, text: words.slice(i, i + 3).join(""), done: false });
+          await new Promise((r) => setTimeout(r, stepMs / 4));
+        }
+        if (!t.stopped()) o.onEvent({ type: "text", itemId, text: s, done: true });
       },
       async bash(command) {
         if (t.stopped()) return { code: 130, out: "stopped" };
@@ -289,9 +304,20 @@ export async function coordinatorTurn(t: Turn): Promise<void> {
     return;
   }
 
+  const mention = parseMention(request);
+  if (mention) {
+    const sent = await t.bash(commands.followUp(mention.threadId, mention.rest || request));
+    if (sent.code !== 0) throw new Error(`could not send the follow-up: ${sent.out}`);
+    await t.say(`Sent “${mention.title}” your follow-up.`);
+
+    return;
+  }
+
   if (request.endsWith("?")) {
-    await t.say(
-      "I'm the scripted coordinator, so I can't answer questions. Ask me to change something and I'll start a thread for it.",
+    await t.stream(
+      "I'm the **scripted coordinator**, so I can't answer questions. Here is what I can do:\n\n" +
+        "- Ask me to change something and I'll start a thread for it.\n" +
+        "- Mention a thread with `@` to send it a follow-up.",
     );
 
     return;
