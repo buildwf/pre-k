@@ -146,6 +146,19 @@ test("the builder commits one change on the thread's branch and lands it on main
   s.close();
 });
 
+test("a thread with no repository finishes and says so", async () => {
+  fs.rmSync(path.join(work, ".git"), { recursive: true, force: true });
+  const o = start();
+  const s = await builderHarness.start(o);
+  await s.send("Fix the typo", "start");
+  const events = await turnEnd(o);
+
+  expect(status(events)).toBe("completed");
+  expect(texts(events).at(-1)).toMatch(/no repository linked/);
+  expect(fs.existsSync(cliLog)).toBe(false);
+  s.close();
+});
+
 test("commits as pre-k where git has no identity", async () => {
   git("config", "--unset", "user.email");
   git("config", "--unset", "user.name");

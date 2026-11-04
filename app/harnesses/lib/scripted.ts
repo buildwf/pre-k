@@ -239,6 +239,13 @@ export async function builderTurn(t: Turn): Promise<void> {
   const title = titleOf(request);
   const file = targetFileOf(request);
 
+  // A project with no repository runs its threads in an empty scratch folder: nothing to commit or land.
+  if ((await t.bash("git rev-parse --git-dir")).code !== 0) {
+    await t.say("This project has no repository linked, so there's nothing for me to change. Link one in Project settings.");
+
+    return;
+  }
+
   await t.say(`Working on “${title}” in ${file}.`);
 
   const edit = await t.bash(
