@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { aria, label, matches, shortcuts, type Shortcut } from "../../lib/shortcuts";
 import { ProjectPanel } from "../../screens/panel";
 import { Delivered } from "../../screens/delivered";
 import { GitHub } from "../../screens/github";
@@ -13,6 +14,8 @@ import { Section } from "../../ui/Section";
 import { Sidebar, SidebarGroup, SidebarItem } from "../../ui/Sidebar";
 import { Window } from "../../ui/Window";
 import { ProjectChat } from "./ProjectChat";
+
+const mac = navigator.platform.startsWith("Mac");
 
 /** What the middle column shows. The project chat is home; a thread, Delivered and Settings open from the sidebar. */
 type View = { kind: "chat" } | { kind: "thread"; threadId: string } | { kind: "delivered" } | { kind: "settings" };
@@ -29,12 +32,33 @@ function Workspace({ project, projects, newProject, notice }: Parameters<Paramet
   const [view, setView] = useState<View>({ kind: "chat" });
   const [panel, setPanel] = useState(true);
   const openThread = (threadId: string) => setView({ kind: "thread", threadId });
+  // Keyboard first, like Cursor and Linear: ⌘1 chat, ⌘2 Delivered, ⌘, settings, ⌘\\ the panel, ⇧⌘N a new project.
+  useEffect(() => {
+    const actions: [Shortcut, () => void][] = [
+      [shortcuts.chat, () => setView({ kind: "chat" })],
+      [shortcuts.delivered, () => setView({ kind: "delivered" })],
+      [shortcuts.settings, () => setView({ kind: "settings" })],
+      [shortcuts.panel, () => setPanel((open) => !open)],
+      [shortcuts.newProject, newProject],
+    ];
+    const onKey = (e: KeyboardEvent) => {
+      const hit = actions.find(([shortcut]) => matches(e, shortcut, mac));
+      if (!hit) return;
+      e.preventDefault();
+      hit[1]();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [newProject]);
+  const keys = (shortcut: Shortcut) => ({ label: label(shortcut, mac), aria: aria(shortcut, mac) });
   const repo = project.repo ? `${project.repo} · ${project.defaultBranch ?? "default branch"}` : "No repository linked";
   const panelToggle = (
     <Button
       size="icon"
       variant="quiet"
       aria-label={panel ? "Hide project panel" : "Show project panel"}
+      aria-keyshortcuts={aria(shortcuts.panel, mac)}
+      title={`${panel ? "Hide" : "Show"} the project panel (${label(shortcuts.panel, mac)})`}
       aria-pressed={panel}
       onClick={() => setPanel(!panel)}
     >
@@ -49,17 +73,32 @@ function Workspace({ project, projects, newProject, notice }: Parameters<Paramet
           header={<ProjectSwitcher project={project} projects={projects} onNew={newProject} />}
           footer={
             <SidebarGroup>
-              <SidebarItem icon="settings" active={view.kind === "settings"} onClick={() => setView({ kind: "settings" })}>
+              <SidebarItem
+                icon="settings"
+                active={view.kind === "settings"}
+                shortcut={keys(shortcuts.settings)}
+                onClick={() => setView({ kind: "settings" })}
+              >
                 Project settings
               </SidebarItem>
             </SidebarGroup>
           }
         >
           <SidebarGroup>
-            <SidebarItem icon="chat" active={view.kind === "chat"} onClick={() => setView({ kind: "chat" })}>
+            <SidebarItem
+              icon="chat"
+              active={view.kind === "chat"}
+              shortcut={keys(shortcuts.chat)}
+              onClick={() => setView({ kind: "chat" })}
+            >
               Project chat
             </SidebarItem>
-            <SidebarItem icon="package" active={view.kind === "delivered"} onClick={() => setView({ kind: "delivered" })}>
+            <SidebarItem
+              icon="package"
+              active={view.kind === "delivered"}
+              shortcut={keys(shortcuts.delivered)}
+              onClick={() => setView({ kind: "delivered" })}
+            >
               Delivered
             </SidebarItem>
           </SidebarGroup>

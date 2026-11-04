@@ -13,10 +13,11 @@ const s = stylex.create({
     paddingInlineStart: space[3],
     borderWidth: 1,
     borderStyle: "solid",
-    borderColor: { default: colors.border, ":focus-within": colors.ring },
+    // A chat box is focused most of the time, so focus is a quiet border change, not the accent ring a field gets.
+    borderColor: { default: colors.border, ":focus-within": colors.mutedForeground },
     borderRadius: radius.lg,
     backgroundColor: colors.card,
-    boxShadow: { default: shadow.sm, ":focus-within": shadow.focus },
+    boxShadow: shadow.sm,
     transitionProperty: "border-color, box-shadow",
     transitionDuration: motion.fast,
   },
@@ -180,7 +181,14 @@ export function Composer({
       <div {...stylex.props(s.row)}>
         <span {...stylex.props(s.hint)}>{hint}</span>
         {actions}
-        <SevenButton type="submit" size="icon" aria-label={sendLabel} disabled={!value.trim()} style={{ borderRadius: "9999px", width: "2rem", height: "2rem" }}>
+        <SevenButton
+          type="submit"
+          size="icon"
+          aria-label={sendLabel}
+          disabled={!value.trim()}
+          // Gray until there is something to send, so an empty box doesn't show a faded accent blob.
+          variant={value.trim() ? "default" : "secondary"} style={{ borderRadius: "9999px", width: "2rem", height: "2rem" }}
+        >
           <Icon name="arrowUp" />
         </SevenButton>
       </div>
