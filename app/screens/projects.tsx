@@ -2,9 +2,11 @@ import { useState, type ReactNode } from "react";
 import { rpc, useAgentModels, useCollection, useConnectors, useRpc } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { linkFailure, repoFromInput } from "../projects/messages";
+import { signInState } from "../lib/signIn";
 import { builderHarness, builderHarnesses, type BuilderHarness } from "../schemas/harness";
 import type { Project, ProjectChange } from "../schemas/project";
 import { Alert } from "../ui/Alert";
+import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { EmptyState } from "../ui/EmptyState";
@@ -354,36 +356,17 @@ function RepositoryField({
 }
 
 
-// Whether the picked agent can run here. Claude Code's saved /login isn't enough: a thread's sandbox can't read the
-// keychain, so it needs a setup-token or a key (main says which, never the value).
+// Whether the picked agent can run here; the wording is app/lib/signIn.ts.
 function SignInState({ harness }: { harness: BuilderHarness }) {
   const models = useAgentModels(harness);
   const claude = useRpc(rpc.harnesses.claudeCredentials);
-  const { signIn, cli } = builderHarnesses[harness];
-  const credential = claude.data?.credential;
-  const text =
-    models.state === "loading"
-      ? "Checking sign-in…"
-      : models.state === "unauthenticated"
-        ? `Not signed in. ${signIn}`
-        : models.state === "empty"
-          ? "Signed in, but this account has no models it can run."
-          : models.state === "failed" && models.message?.includes("does not report its models")
-            ? `pre-k can't check this agent's sign-in. If its threads fail to start: ${signIn}`
-            : models.state === "failed"
-              ? `Couldn't check sign-in (${models.message ?? "unknown error"}). Is \`${cli}\` installed and on PATH?`
-              : harness !== "claude-code"
-                ? "Signed in."
-                : credential === "api-key"
-                  ? "Ready: threads use your Anthropic API key, metered by pre-k."
-                  : credential === "oauth-token"
-                    ? "Ready: threads use your Claude subscription (setup-token)."
-                    : `Signed in, but threads can't use the saved login. ${signIn}`;
+  const state = signInState(harness, models, claude.data?.credential);
 
   return (
     <Stack direction="row" gap={8} align="center" wrap>
+      <Badge tone={state.tone}>{state.badge}</Badge>
       <Text tone="muted" role="status">
-        {text}
+        {state.text}
       </Text>
       {models.state !== "loading" && models.state !== "ready" && (
         <Button variant="quiet" onClick={() => void models.refresh()}>

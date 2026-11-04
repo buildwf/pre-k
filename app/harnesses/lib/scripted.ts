@@ -248,7 +248,10 @@ export async function builderTurn(t: Turn): Promise<void> {
   if (edit.code !== 0) throw new Error(`could not edit ${file}: ${edit.out}`);
 
   const commit = await t.bash(
-    `git add -A && git commit -q -m ${sh(title)} && git rev-parse --short HEAD`,
+    // A machine with no git identity (a fresh CI box, a sandbox that hides ~/.gitconfig) still commits, as pre-k.
+    "{ git config user.email >/dev/null || export GIT_AUTHOR_NAME='pre-k builder' GIT_AUTHOR_EMAIL=builder@pre-k.invalid " +
+      "GIT_COMMITTER_NAME='pre-k builder' GIT_COMMITTER_EMAIL=builder@pre-k.invalid; } && " +
+      `git add -A && git commit -q -m ${sh(title)} && git rev-parse --short HEAD`,
   );
 
   if (commit.code !== 0) throw new Error(`could not commit: ${commit.out}`);

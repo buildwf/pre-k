@@ -146,6 +146,24 @@ test("the builder commits one change on the thread's branch and lands it on main
   s.close();
 });
 
+test("commits as pre-k where git has no identity", async () => {
+  git("config", "--unset", "user.email");
+  git("config", "--unset", "user.name");
+  const saved = { HOME: process.env.HOME, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME };
+  Object.assign(process.env, { HOME: dir, XDG_CONFIG_HOME: dir, GIT_CONFIG_NOSYSTEM: "1" });
+  const o = start();
+  const s = await builderHarness.start(o);
+  await s.send("Fix the typo", "start");
+  const events = await turnEnd(o).finally(() => {
+    for (const [k, v] of Object.entries(saved)) v === undefined ? delete process.env[k] : (process.env[k] = v);
+    delete process.env.GIT_CONFIG_NOSYSTEM;
+  });
+
+  expect(status(events)).toBe("completed");
+  expect(git("log", "-1", "--format=%an <%ae>")).toBe("pre-k builder <builder@pre-k.invalid>");
+  s.close();
+});
+
 test("a CLI crash (139, nothing printed) lands again once", async () => {
   process.env.PREK_FAKE_CLI_CRASH = path.join(dir, "crashed");
   const o = start();
