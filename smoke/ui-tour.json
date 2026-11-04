@@ -10,5 +10,10 @@
   { "click": "Add a README badge" },
   { "waitText": "could not commit" },
   { "click": "Project settings" },
-  { "waitText": "Instructions" }
+  { "waitText": "Instructions" },
+  { "click": "Project chat" },
+  { "type": "Message the coordinator", "text": "What can you do?" },
+  { "press": "Enter" },
+  { "waitText": "so I can't" },
+  { "waitText": "send it a follow-up." }
 ]

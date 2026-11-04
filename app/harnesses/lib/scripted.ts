@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { HarnessSession, HarnessStart } from "point/app";
+import { attachmentsIn } from "../../attachments/store";
 import { parseMention } from "../../threads/mentions";
 
 /**
@@ -18,10 +19,10 @@ export const commands = {
    */
   // The name is read first and once more if empty (the CLI can crash with no output, cloudflare-point#740), and an
   // empty name stops here rather than reach threads start. threads start itself isn't retried: it may have started one.
-  startThread: (title: string, request: string) =>
+  startThread: (title: string, request: string, attachments: readonly string[] = []) =>
     `n="$("$POINT_CLI" coordinator name)"; [ -n "$n" ] || n="$("$POINT_CLI" coordinator name)"; ` +
     `[ -n "$n" ] || { echo "pre-k couldn't say who asked; ask again" >&2; exit 1; }; ` +
-    `exec "$POINT_CLI" threads start --title ${sh(title)} --request ${sh(request)} --requestedBy "$n" --json`,
+    `exec "$POINT_CLI" threads start --title ${sh(title)} --request ${sh(request)} --requestedBy "$n"${attachments.length ? ` --attachments ${sh(attachments.join(","))}` : ""} --json`,
   /** An @-mentioned thread gets the rest of the message as a follow-up (reopened if it had finished). */
   followUp: (threadId: string, text: string) =>
     `n="$("$POINT_CLI" coordinator name)"; exec "$POINT_CLI" threads followUp --threadId ${sh(threadId)} --text ${sh(text)} \${n:+--by "$n"} --json`,
@@ -73,6 +74,8 @@ const RESUME = "Continue where you left off";
 /** What a scripted turn can do: talk, run a command as a visible `Bash` tool call, and check for a stop. */
 export interface Turn {
   text: string;
+  /** The files that came with the message: their names. */
+  attached: string[];
   say(text: string): Promise<void>;
   /** Say it a few words at a time, as a model streams its reply. */
   stream(text: string): Promise<void>;
@@ -116,7 +119,7 @@ export function scriptedSession(
     return { code, out: (code === 0 ? out : `${out}${err}`).trim() };
   };
 
-  const turn = async (text: string) => {
+  const turn = async (text: string, attached: string[]) => {
     const turnId = randomUUID();
     busy = true;
     interrupted = false;
@@ -125,6 +128,7 @@ export function scriptedSession(
 
     const t: Turn = {
       text,
+      attached,
       steers,
       stopped: () => interrupted || closed,
       async say(s) {
@@ -137,7 +141,8 @@ export function scriptedSession(
         const words = s.split(/(?<=\s)/);
         for (let i = 0; i < words.length && !t.stopped(); i += 3) {
           o.onEvent({ type: "text", itemId, text: words.slice(i, i + 3).join(""), done: false });
-          await new Promise((r) => setTimeout(r, stepMs / 4));
+          // PREK_SCRIPTED_STREAM_MS slows it down, so the UI tour can catch a reply mid-stream.
+          await new Promise((r) => setTimeout(r, Number(process.env.PREK_SCRIPTED_STREAM_MS) || stepMs / 4));
         }
         if (!t.stopped()) o.onEvent({ type: "text", itemId, text: s, done: true });
       },
@@ -223,10 +228,10 @@ export function scriptedSession(
   o.onEvent({ type: "session", id: o.threadId });
 
   return {
-    async send(text, mode) {
+    async send(text, mode, attachments) {
       if (mode === "steer" && busy) return (steers.push(text), "delivered");
 
-      current = turn(text);
+      current = turn(text, (attachments ?? []).map((a) => a.name ?? a.mime));
 
       return "delivered";
     },
@@ -250,11 +255,12 @@ export function scriptedSession(
 
 /** The builder's turn: change the named file (or README.md), commit it on the thread's branch, land it on main. */
 export async function builderTurn(t: Turn): Promise<void> {
-  const request = t.text.trim();
+  const request = attachmentsIn(t.text).text;
   const title = titleOf(request);
   const file = targetFileOf(request);
 
   await t.say(`Working on “${title}” in ${file}.`);
+  if (t.attached.length) await t.say(`Got ${t.attached.length === 1 ? "1 attached file" : `${t.attached.length} attached files`}: ${t.attached.join(", ")}.`);
 
   const edit = await t.bash(
     `mkdir -p "$(dirname ${sh(file)})" && printf '%s\\n' ${sh(`- ${title} (pre-k scripted builder)`)} >> ${sh(file)}`,
@@ -323,8 +329,9 @@ export async function coordinatorTurn(t: Turn): Promise<void> {
     return;
   }
 
-  const title = titleOf(request);
-  const started = await t.bash(commands.startThread(title, request));
+  const { text, attachments } = attachmentsIn(request);
+  const title = titleOf(text);
+  const started = await t.bash(commands.startThread(title, request, attachments.map((a) => a.id)));
 
   if (started.code === 139)
     throw new Error("could not start a thread: Point's command line crashed; ask again");

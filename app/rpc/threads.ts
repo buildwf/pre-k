@@ -5,6 +5,7 @@ import path from "node:path";
 import { z } from "zod";
 import { builderAgentFor } from "../schemas/harness";
 import { preparedWorkspace as prepared } from "../schemas/workspace";
+import { attachmentsIn, loadAttachments } from "../attachments/store";
 import { recordAttempt } from "../threads/attempts";
 import { callerThread, outputKey, threadState } from "../threads/state";
 
@@ -82,6 +83,8 @@ export default defineRouter({
         title: z.string().trim().min(1).max(120),
         request: z.string().trim().min(1),
         requestedBy: z.string().trim().min(1),
+        // Files the person attached in project chat, by id, comma-separated (`[attachment: …](attachment:<id>)`).
+        attachments: z.string().optional(),
       }),
     )
     .errors({
@@ -146,12 +149,22 @@ export default defineRouter({
 
       // The thread stays even if the first message fails (no key, no harness): its transcript shows the error and the
       // person can retry from the thread.
-      const sent = await rpc.call("agents.send", {
-        threadId: threadId.data,
-        text: input.request,
-        turn: "queue",
-        by: input.requestedBy,
-      });
+      const files = input.attachments
+        ? await loadAttachments(projectId, input.attachments.split(",").map((s) => s.trim()))
+        : [];
+      const request = files.length ? attachmentsIn(input.request).text : input.request;
+      const first = (attachments: typeof files) =>
+        rpc.call("agents.send", {
+          threadId: threadId.data,
+          // The attachment lines are for the coordinator; the thread gets the files themselves (or their paths).
+          text: attachments.length || !files.length ? request : `${request}\n\n${onDisk(files)}`,
+          turn: "queue",
+          by: input.requestedBy,
+          ...(attachments.length ? { attachments: attachments.map(({ mime, data, name }) => ({ mime, data, name })) } : {}),
+        });
+      // A harness that can't take attachments refuses the message: send it again with where the files are instead.
+      let sent = await first(files);
+      if (!sent.ok && files.length) sent = await first([]);
       const r = sent.ok ? receipt.safeParse(sent.value) : undefined;
       // A harness that can't start (no key, no binary) never runs a turn: record the failure for the list here.
       if (!sent.ok) await recordAttempt(collections, threadId.data, true, messageOf(sent.failure));
@@ -280,3 +293,8 @@ export default defineRouter({
       return "ended" as const;
     }),
 });
+
+/** Where attached files are on this computer, for an agent that couldn't take them inline. */
+function onDisk(files: readonly { name: string; path: string }[]): string {
+  return `Attached files (on this computer):\n${files.map((f) => `- ${f.name}: ${f.path}`).join("\n")}`;
+}

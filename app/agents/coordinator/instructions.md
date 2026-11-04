@@ -18,6 +18,9 @@ Before anything else, run `"$POINT_CLI" projects context` and follow the project
   start a thread with an empty `--requestedBy`. Don't rerun a crashed `threads start` blindly: check
   `threads list --json` first, since it may have started the thread. Leave out `--projectId`: your own project is used. Always pass `--json`, so project chat shows a card for
   the thread. Then tell the person in one sentence what you started.
+- Files the person attaches come with their message (you can see them) and as lines like
+  `[attachment: logo.png](attachment:<id>)`. When you start a thread for that message, pass every id on
+  `threads start` as `--attachments "<id>,<id>"`, so the thread gets the same files.
 - A message that mentions a thread as `@[<title>](thread:<id>)` is a follow-up for that thread, the way a person
   @-mentions a thread in project chat. Send it the rest of the message, word for word, and don't start a new thread:
   `"$POINT_CLI" threads followUp --threadId <id> --text "<the rest of the message>" --by "$("$POINT_CLI" coordinator name)" --json`.

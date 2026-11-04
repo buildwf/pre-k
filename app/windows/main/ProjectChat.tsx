@@ -1,10 +1,12 @@
+import { z } from "zod";
 import { useEffect, useState, type ReactNode } from "react";
 import { ThreadLandedCommit } from "../../lib/ThreadLandedCommit";
-import { rpc, useAgent, useCollection, useRpc, useThreads } from "point/client";
+import { omitUndefined, rpc, useAgent, useCollection, useRpc, useThreads, type RpcInput } from "point/client";
 import { eq, useLiveQuery } from "point/cloud/db";
 import { render } from "../../../.point/components";
 import { ThreadPullRequest } from "../../lib/ThreadPullRequest";
 import { stateLabel } from "../../threads/labels";
+import { ATTACHABLE, MAX_BYTES, MAX_FILES, attachmentLine, attachmentsIn } from "../../attachments/lines";
 import { mentionMatches, mentionQuery, parseMention, pickMention, withMentions, type Mentionable } from "../../threads/mentions";
 import { UPDATE_PREFIX } from "../../threads/relay";
 import { quietLines, threadStart } from "../../threads/started";
@@ -127,23 +129,58 @@ function Conversation({
   const mention = useMentions(projectId);
   const me = useRpc(rpc.coordinator.whoami, undefined);
   const [text, setText] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
   const [sendProblem, setSendProblem] = useState<string>();
   const name = me.data?.name;
   const busy = agent.status === "running" || agent.status === "parked" || agent.status === "paused";
-  const send = async (message: string, turn: "queue" | "steer") => {
+  const send = async (
+    message: string,
+    turn: "queue" | "steer",
+    attachments: RpcInput<typeof rpc.attachments.save>["files"] = [],
+  ) => {
     if (!message.trim()) return;
     setSendProblem(undefined);
     // Recorded under the person's name, so the coordinator's threads say who asked.
-    const r = await (name
-      ? rpc.agents.send({ threadId, text: message, turn, by: name })
-      : rpc.agents.send({ threadId, text: message, turn }));
+    const r = await rpc.agents.send({
+      threadId,
+      text: message,
+      turn,
+      ...omitUndefined({ by: name, attachments: attachments.length ? attachments : undefined }),
+    });
     if (!r.ok) setSendProblem(`Your message didn't reach the coordinator (${r.failure.code}). Send it again.`);
     else if (r.value === "rejected") setSendProblem("The coordinator couldn't take that message just now. Send it again.");
   };
+  const attach = (dropped: File[]) => {
+    const fits = dropped.filter((f) => mimeOf(f) && f.size <= MAX_BYTES);
+    const skipped = dropped.length - fits.length;
+    const next = [...files, ...fits].slice(0, MAX_FILES);
+    setFiles(next);
+    setSendProblem(
+      skipped || files.length + fits.length > MAX_FILES
+        ? `You can attach up to ${MAX_FILES} images, PDFs or text files of ${MAX_BYTES / 1024 / 1024} MB each.`
+        : undefined,
+    );
+  };
   const submit = (turn: "queue" | "steer") => {
-    void send(withMentions(text, mention.picked), turn);
+    const message = withMentions(text, mention.picked);
+    const sending = files;
     setText("");
+    setFiles([]);
     mention.reset();
+    if (!sending.length) return void send(message, turn);
+    // Saved first, so the message can name them and the coordinator can hand them to a thread by id.
+    void (async () => {
+      const read = await Promise.all(sending.map(async (f) => ({ name: f.name, mime: mimeOf(f) ?? "text/plain", data: await dataUrl(f) })));
+      const saved = await rpc.attachments.save({ projectId, files: read });
+      if (!saved.ok) {
+        setFiles(sending);
+        setText(text);
+        return setSendProblem(
+          saved.failure.code === "TOO_BIG" ? saved.failure.detail.message : `Your files didn't attach (${saved.failure.code}).`,
+        );
+      }
+      await send(`${message}\n\n${saved.value.map(attachmentLine).join("\n")}`, turn, read);
+    })();
   };
   const steers = new Map<string, string>();
   let lastError: { id: string; message: string } | undefined;
@@ -260,6 +297,10 @@ function Conversation({
           onChange={setText}
           onSubmit={() => submit("queue")}
           suggestions={mention.suggestions(text, setText)}
+          attachments={files.map((f) => ({ id: `${f.name}:${f.size}:${f.lastModified}`, name: f.name }))}
+          onAttach={attach}
+          onRemoveAttachment={(i) => setFiles(files.filter((_, j) => j !== i))}
+          accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/*,.md,.txt,.csv,.log"
           sendLabel={busy ? "Queue" : "Send"}
           placeholder={
             busy ? "Queue a message for after this turn" : "Ask about the project, hand off work, or @ a thread"
@@ -341,15 +382,46 @@ function StartedThread({
 }
 
 /** The person's message, with an @-mentioned thread shown as its title in bold rather than as the raw token. */
-function YourText({ text }: { text: string }) {
+function YourText({ text: raw }: { text: string }) {
+  const { text, attachments } = attachmentsIn(raw);
   const m = parseMention(text);
-  if (!m) return <>{text}</>;
   return (
     <>
-      {m.before ? `${m.before} ` : ""}
-      <Text bold>@{m.title}</Text> {m.rest.slice(m.before.length).trim()}
+      {m ? (
+        <>
+          {m.before ? `${m.before} ` : ""}
+          <Text bold>@{m.title}</Text> {m.rest.slice(m.before.length).trim()}
+        </>
+      ) : (
+        text
+      )}
+      {attachments.length > 0 && (
+        <Text tone="muted">
+          {" "}
+          · Attached {attachments.map((a) => a.name).join(", ")}
+        </Text>
+      )}
     </>
   );
+}
+
+const isMime = (mime: string): mime is (typeof ATTACHABLE)[number] => ATTACHABLE.some((m) => m === mime);
+/** Markdown and other text files go as plain text, which Claude reads as a document. */
+const mimeOf = (f: File): (typeof ATTACHABLE)[number] | undefined =>
+  isMime(f.type) ? f.type : /\.(md|txt|log|csv)$/i.test(f.name) || f.type.startsWith("text/") ? "text/plain" : undefined;
+
+/** A file as a base64 data URL, for Point's attachments. */
+function dataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = z.string().safeParse(reader.result);
+      if (url.success) resolve(url.data);
+      else reject(new Error("unreadable"));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("unreadable"));
+    reader.readAsDataURL(file);
+  });
 }
 
 /**

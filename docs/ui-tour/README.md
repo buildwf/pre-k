@@ -11,9 +11,12 @@ Each shot is the visible 800x600 part of the window after a step. Everything is 
 3. [The coordinator starts a thread](3-coordinator-starts-thread.png): "Add a README badge" becomes a thread card.
 4. [Threads and a thread view](4-threads-and-thread-view.png): the thread list with the opened thread, its controls and transcript.
 5. [Project settings](5-project-settings.png): name, instructions and project memory.
+6. [A reply streaming in](6-reply-streaming.png): the coordinator's markdown reply, caught mid-stream (the scripted
+   coordinator streams slowly in the tour, `PREK_SCRIPTED_STREAM_MS`).
 
 ![New project](1-new-project.png)
 ![Project chat](2-project-chat.png)
 ![Coordinator starts a thread](3-coordinator-starts-thread.png)
 ![Threads and thread view](4-threads-and-thread-view.png)
 ![Project settings](5-project-settings.png)
+![A reply streaming in](6-reply-streaming.png)

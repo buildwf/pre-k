@@ -152,3 +152,35 @@ describe("threads.start", () => {
     expect(main.calls).toEqual([]);
   });
 });
+
+describe("threads.start with attachments", () => {
+  const home = process.env.HOME;
+  afterEach(() => {
+    process.env.HOME = home;
+  });
+
+  it("hands the thread the files the person attached, or where they are if its agent can't take them", async () => {
+    process.env.HOME = await fs.mkdtemp(path.join(os.tmpdir(), "prek-home-"));
+    const { saveAttachments } = await import("../attachments/store");
+    const [logo] = await saveAttachments("p1", [{ name: "logo.png", mime: "image/png", data: "aGk=" }]);
+    const id = logo?.id ?? "";
+
+    const main = fakeMain();
+    const { rpc } = client("agent:coordinator-1", main);
+    expect((await rpc.start({ ...input, request: `${input.request}\n\n[attachment: logo.png](attachment:${id})`, attachments: id })).ok).toBe(true);
+    expect(main.calls.find((c) => c.path === "agents.send")?.input).toMatchObject({
+      text: input.request,
+      attachments: [{ mime: "image/png", data: "aGk=", name: "logo.png" }],
+    });
+
+    const refusing = fakeMain();
+    let sends = 0;
+    const call = refusing.call;
+    refusing.call = async (p: string, i: unknown) => (p === "agents.send" && sends++ === 0 ? (refusing.calls.push({ path: p, input: i }), no("BAD_INPUT")) : call(p, i));
+    const c2 = client("agent:coordinator-1", refusing);
+    expect((await c2.rpc.start({ ...input, attachments: id })).ok).toBe(true);
+    const second = refusing.calls.filter((c) => c.path === "agents.send")[1]?.input;
+    expect(second).not.toHaveProperty("attachments");
+    expect(z.object({ text: z.string() }).parse(second).text).toMatch(/Attached files \(on this computer\):\n- logo\.png: .*attachments/);
+  });
+});

@@ -17,7 +17,7 @@ mkdir -p .point/smoke
 # (buildwf/cloudflare-point#740), which fails a step at random. Until that's fixed, a failed run is retried up to
 # twice; every failure is still printed, and three failures in a row fail verify. Remove this loop when #740 lands.
 attempt=1
-until PREK_HARNESS=scripted bunx point smoke --no-secrets --screenshot "$shots" --steps smoke/ui-tour.json \
+until PREK_HARNESS=scripted PREK_SCRIPTED_STREAM_MS=1000 bunx point smoke --no-secrets --screenshot "$shots" --steps smoke/ui-tour.json \
   --timeout 60000 >"$shots.log" 2>&1; do
   if [ "$attempt" -ge 3 ]; then
     cat "$shots.log"
@@ -44,6 +44,7 @@ copy -4 2-project-chat
 copy -8 3-coordinator-starts-thread
 copy -10 4-threads-and-thread-view
 copy -12 5-project-settings
+copy -16 6-reply-streaming
 echo "$source" >docs/ui-tour/.source
 rm -rf "$shots" "$shots.log"
 echo "tour: docs/ui-tour refreshed"

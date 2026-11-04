@@ -334,3 +334,16 @@ test("PREK_HARNESS=scripted swaps an agent onto its scripted harness", async () 
   );
   delete process.env.PREK_HARNESS;
 });
+
+test("the coordinator passes attached files on to the thread it starts", async () => {
+  const o = start();
+  const s = await coordinatorHarness.start(o);
+  const id = "0b4c3c8e-1111-4222-8333-444455556666";
+  await s.send(`Use this logo in the README\n\n[attachment: logo.png](attachment:${id})`, "start", [
+    { mime: "image/png", data: "aGk=", name: "logo.png" },
+  ]);
+  await turnEnd(o);
+  const log = fs.readFileSync(cliLog, "utf8").trim().split("\n");
+  expect(log[1]).toMatch(/^threads start --title Use this logo in the README .* --requestedBy Zack --attachments 0b4c3c8e-1111-4222-8333-444455556666 --json$/);
+  s.close();
+});
